@@ -717,8 +717,13 @@ def require_auth(roles: list = None, perms: list = None):
             if not user.get('enabled', True):
                 return jsonify({'error': 'Account is disabled', 'code': 'ACCOUNT_DISABLED'}), 401
             
+            # NS Mar 2026 - refresh role from DB, session might be stale after admin change
+            fresh_role = user.get('role', session['role'])
+            if fresh_role != session['role']:
+                session['role'] = fresh_role
+
             # Check role if specified
-            if roles and session['role'] not in roles:
+            if roles and fresh_role not in roles:
                 return jsonify({'error': 'Forbidden', 'code': 'INSUFFICIENT_PERMISSIONS'}), 403
             
             # check permissions if specified

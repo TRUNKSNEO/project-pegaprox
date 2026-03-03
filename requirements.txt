@@ -30,5 +30,8 @@ qrcode[pil]>=7.4.0
 # === LDAP Auth ===
 ldap3>=2.9.0
 
+# === OIDC JWT Verification ===
+PyJWT[crypto]>=2.8.0
+
 # === ESXi Migration (Optional) ===
 pyvmomi>=8.0.0

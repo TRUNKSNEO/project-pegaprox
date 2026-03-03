@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 from pegaprox.models.permissions import ROLE_ADMIN
 from pegaprox.utils.auth import require_auth
 from pegaprox.utils.audit import log_audit
-from pegaprox.api.helpers import get_connected_manager, check_cluster_access
+from pegaprox.api.helpers import get_connected_manager, check_cluster_access, safe_error
 
 bp = Blueprint('ceph', __name__)
 
@@ -109,6 +109,9 @@ def get_ceph_overview(cluster_id):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/status', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_node_ceph_status(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -125,6 +128,9 @@ def get_node_ceph_status(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/config', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_node_ceph_config(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -139,6 +145,9 @@ def get_node_ceph_config(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/log', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_node_ceph_log(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -162,6 +171,9 @@ def get_node_ceph_log(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/osd', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_osds(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -176,6 +188,9 @@ def get_ceph_osds(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/osd', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def create_ceph_osd(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -187,12 +202,15 @@ def create_ceph_osd(cluster_id, node):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph OSD operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/osd/<int:osdid>', methods=['DELETE'])
 @require_auth(roles=[ROLE_ADMIN])
 def destroy_ceph_osd(cluster_id, node, osdid):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     # NS: Feb 2026 - SECURITY: require confirmation for destructive operations
     data = request.json or {}
     if str(data.get('confirm_name', '')) != str(osdid):
@@ -210,12 +228,15 @@ def destroy_ceph_osd(cluster_id, node, osdid):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph OSD operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/osd/<int:osdid>/<action>', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def ceph_osd_action(cluster_id, node, osdid, action):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     if action not in ('in', 'out', 'scrub', 'deep-scrub'):
         return jsonify({'error': f'Invalid OSD action: {action}'}), 400
     manager, error = get_connected_manager(cluster_id)
@@ -228,7 +249,7 @@ def ceph_osd_action(cluster_id, node, osdid, action):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph OSD operation failed')}), 500
 
 
 # ============================================
@@ -238,6 +259,9 @@ def ceph_osd_action(cluster_id, node, osdid, action):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mon', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_mons(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -252,6 +276,9 @@ def get_ceph_mons(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mon/<monid>', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def create_ceph_mon(cluster_id, node, monid):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -263,12 +290,15 @@ def create_ceph_mon(cluster_id, node, monid):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph monitor operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mon/<monid>', methods=['DELETE'])
 @require_auth(roles=[ROLE_ADMIN])
 def destroy_ceph_mon(cluster_id, node, monid):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -279,7 +309,7 @@ def destroy_ceph_mon(cluster_id, node, monid):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph monitor operation failed')}), 500
 
 
 # ============================================
@@ -289,6 +319,9 @@ def destroy_ceph_mon(cluster_id, node, monid):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mds', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_mds(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -303,6 +336,9 @@ def get_ceph_mds(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mds/<name>', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def create_ceph_mds(cluster_id, node, name):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -313,12 +349,15 @@ def create_ceph_mds(cluster_id, node, name):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph service operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mds/<name>', methods=['DELETE'])
 @require_auth(roles=[ROLE_ADMIN])
 def destroy_ceph_mds(cluster_id, node, name):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -329,7 +368,7 @@ def destroy_ceph_mds(cluster_id, node, name):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph service operation failed')}), 500
 
 
 # ============================================
@@ -339,6 +378,9 @@ def destroy_ceph_mds(cluster_id, node, name):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/mgr', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_mgr(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -357,6 +399,9 @@ def get_ceph_mgr(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/pool', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_pools(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -371,6 +416,9 @@ def get_ceph_pools(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/pool', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def create_ceph_pool(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -382,12 +430,15 @@ def create_ceph_pool(cluster_id, node):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph pool operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/pool/<name>', methods=['PUT'])
 @require_auth(roles=[ROLE_ADMIN])
 def update_ceph_pool(cluster_id, node, name):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -399,12 +450,15 @@ def update_ceph_pool(cluster_id, node, name):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph pool operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/pool/<name>', methods=['DELETE'])
 @require_auth(roles=[ROLE_ADMIN])
 def destroy_ceph_pool(cluster_id, node, name):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     # NS: Feb 2026 - SECURITY: require confirmation for destructive operations
     data = request.json or {}
     if data.get('confirm_name') != name:
@@ -424,7 +478,7 @@ def destroy_ceph_pool(cluster_id, node, name):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph pool operation failed')}), 500
 
 
 # ============================================
@@ -434,6 +488,9 @@ def destroy_ceph_pool(cluster_id, node, name):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/fs', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_fs(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -448,6 +505,9 @@ def get_ceph_fs(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/fs', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def create_ceph_fs(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -459,12 +519,15 @@ def create_ceph_fs(cluster_id, node):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'CephFS operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/fs/<name>', methods=['DELETE'])
 @require_auth(roles=[ROLE_ADMIN])
 def destroy_ceph_fs(cluster_id, node, name):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     # NS: Feb 2026 - SECURITY: require confirmation for destructive operations
     data = request.json or {}
     if data.get('confirm_name') != name:
@@ -479,7 +542,7 @@ def destroy_ceph_fs(cluster_id, node, name):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'CephFS operation failed')}), 500
 
 
 # ============================================
@@ -489,6 +552,9 @@ def destroy_ceph_fs(cluster_id, node, name):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/rules', methods=['GET'])
 @require_auth(perms=['node.view'])
 def get_ceph_rules(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -507,6 +573,9 @@ def get_ceph_rules(cluster_id, node):
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/<action>', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def ceph_service_action(cluster_id, node, action):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     if action not in ('start', 'stop', 'restart'):
         return jsonify({'error': f'Invalid service action: {action}'}), 400
     manager, error = get_connected_manager(cluster_id)
@@ -520,12 +589,15 @@ def ceph_service_action(cluster_id, node, action):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph service operation failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/ceph/init', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def init_ceph(cluster_id, node):
+    ok, err = check_cluster_access(cluster_id)
+    if not ok: return err
+
     manager, error = get_connected_manager(cluster_id)
     if error: return error
     try:
@@ -537,4 +609,4 @@ def init_ceph(cluster_id, node):
             return jsonify(r.json().get('data', ''))
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Ceph init failed')}), 500

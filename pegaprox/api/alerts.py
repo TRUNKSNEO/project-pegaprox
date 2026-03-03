@@ -15,7 +15,7 @@ from pegaprox.core.db import get_db
 
 from pegaprox.utils.auth import require_auth
 from pegaprox.utils.audit import log_audit
-from pegaprox.api.helpers import check_cluster_access
+from pegaprox.api.helpers import check_cluster_access, safe_error
 from pegaprox.background.alerts import load_alerts_config, save_alerts_config
 
 bp = Blueprint('alerts', __name__)
@@ -182,7 +182,7 @@ def get_cluster_alerts(cluster_id):
         return jsonify({'alerts': cluster_alerts})
     except Exception as e:
         logging.error(f"Error getting cluster alerts: {e}")
-        return jsonify({'alerts': [], 'error': str(e)})
+        return jsonify({'alerts': [], 'error': safe_error(e, 'Alert operation failed')})
 
 @bp.route('/api/clusters/<cluster_id>/alerts', methods=['POST'])
 @require_auth(perms=['cluster.config'])
@@ -262,7 +262,7 @@ def delete_cluster_alert(cluster_id, alert_id):
         return jsonify({'success': True, 'deleted': deleted})
     except Exception as e:
         logging.error(f"Error deleting cluster alert: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Alert operation failed')}), 500
 
 
 # ============================================
@@ -362,7 +362,7 @@ def get_cluster_affinity_rules(cluster_id):
         return jsonify({'rules': cluster_rules})
     except Exception as e:
         logging.error(f"Error getting affinity rules: {e}")
-        return jsonify({'rules': [], 'error': str(e)})
+        return jsonify({'rules': [], 'error': safe_error(e, 'Alert operation failed')})
 
 @bp.route('/api/clusters/<cluster_id>/affinity-rules', methods=['POST'])
 @require_auth(perms=['cluster.config'])
@@ -418,7 +418,7 @@ def delete_cluster_affinity_rule(cluster_id, rule_id):
         return jsonify({'success': True, 'deleted': deleted})
     except Exception as e:
         logging.error(f"Error deleting affinity rule: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Alert operation failed')}), 500
 
 
 # ============================================

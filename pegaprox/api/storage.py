@@ -20,7 +20,7 @@ from pegaprox.core.db import get_db
 from pegaprox.utils.auth import require_auth
 from pegaprox.utils.audit import log_audit
 from pegaprox.core.cache import APIRateLimiter, StorageDataCache
-from pegaprox.api.helpers import get_connected_manager, check_cluster_access
+from pegaprox.api.helpers import get_connected_manager, check_cluster_access, safe_error
 from pegaprox.utils.ssh import get_paramiko, _ssh_track_connection
 from pegaprox import globals as _g
 
@@ -235,7 +235,7 @@ def connect_esxi_host(cluster_id):
         
     except Exception as e:
         logging.error(f"[ESXI] Error adding storage: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to add ESXi storage')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/esxi-hosts/<host_id>', methods=['DELETE'])
@@ -854,7 +854,7 @@ def get_storage_cluster_status(cluster_id, sc_id):
         
     except Exception as e:
         logging.error(f"Error getting storage cluster status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get storage cluster status')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/storage-balancing/migrate', methods=['POST'])
@@ -944,7 +944,7 @@ def execute_storage_migration(cluster_id):
             
     except Exception as e:
         logging.error(f"Error executing storage migration: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Storage migration failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/storage-balancing/stats', methods=['GET'])
@@ -1435,7 +1435,7 @@ def create_storage(cluster_id):
             
     except Exception as e:
         logging.error(f"Error creating storage: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create storage')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/storage/<storage_id>', methods=['GET'])
@@ -1459,7 +1459,7 @@ def get_storage_config(cluster_id, storage_id):
             return jsonify(response.json().get('data', {}))
         return jsonify({'error': 'Storage not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get storage config')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/storage/<storage_id>', methods=['PUT'])
@@ -1518,7 +1518,7 @@ def update_storage(cluster_id, storage_id):
             
     except Exception as e:
         logging.error(f"Error updating storage: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update storage')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/storage/<storage_id>', methods=['DELETE'])
@@ -1555,7 +1555,7 @@ def delete_storage(cluster_id, storage_id):
             
     except Exception as e:
         logging.error(f"Error deleting storage: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete storage')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/storage/<storage_id>/status', methods=['GET'])
@@ -1607,9 +1607,9 @@ def get_storage_status(cluster_id, storage_id):
             'config': config,
             'status': node_status
         })
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get storage status')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/storage/<storage_id>/rescan', methods=['POST'])
@@ -1838,7 +1838,7 @@ def rescan_storage(cluster_id, storage_id):
                         node_result['actions'].append({
                             'action': 'deep_scan',
                             'status': 'failed',
-                            'error': str(e)[:100]
+                            'error': safe_error(e, 'Deep scan failed')[:100]
                         })
                     finally:
                         # Always release SSH semaphore
@@ -1917,7 +1917,7 @@ def rescan_storage(cluster_id, storage_id):
         
     except Exception as e:
         logging.error(f"Error rescanning storage {storage_id}: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to rescan storage')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/storage/scan', methods=['POST'])
@@ -2015,7 +2015,7 @@ def scan_storage(cluster_id):
             
     except Exception as e:
         logging.error(f"Error scanning storage: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to scan storage')}), 500
 
 
 # Template Download API
@@ -2081,7 +2081,7 @@ def get_available_templates(cluster_id):
         
     except Exception as e:
         logging.error(f"Error getting available templates: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to list templates')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/templates/download', methods=['POST'])
@@ -2155,7 +2155,7 @@ def download_template(cluster_id):
             
     except Exception as e:
         logging.error(f"Error downloading template: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to download template')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/storage/<storage>/content', methods=['GET'])
@@ -2263,7 +2263,7 @@ def download_from_url(cluster_id, node, storage):
             
     except Exception as e:
         logging.error(f"Error downloading from URL: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to download from URL')}), 500
 
 
 # Backup API
@@ -2312,7 +2312,7 @@ def create_backup_job(cluster_id):
             return jsonify({'success': True, 'message': 'Backup job created'})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create backup job')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/backup/<job_id>', methods=['PUT'])
@@ -2338,7 +2338,7 @@ def update_backup_job(cluster_id, job_id):
             return jsonify({'success': True, 'message': 'Backup job updated'})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update backup job')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/backup/<job_id>', methods=['DELETE'])
@@ -2363,7 +2363,7 @@ def delete_backup_job(cluster_id, job_id):
             return jsonify({'success': True, 'message': 'Backup job deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete backup job')}), 500
 
 
 # ============================================

@@ -1070,8 +1070,8 @@ class PegaProxDB:
         # Check for AES-256-GCM format
         if data.startswith('aes256:'):
             if not self.aesgcm:
-                logging.error("AES-256-GCM data found but encryption not initialized!")
-                return data
+                # LW Mar 2026 - don't return ciphertext as if it were plaintext
+                raise RuntimeError("AES-256-GCM data found but encryption not initialized")
             try:
                 encrypted = base64.b64decode(data[7:])  # Remove "aes256:" prefix
                 nonce = encrypted[:12]  # First 12 bytes are nonce
@@ -1079,8 +1079,8 @@ class PegaProxDB:
                 plaintext = self.aesgcm.decrypt(nonce, ciphertext, None)
                 return plaintext.decode('utf-8')
             except Exception as e:
-                logging.error(f"AES-256-GCM decryption failed: {e}")
-                return data
+                # NS Mar 2026 - returning garbled aes256: data would be used as a password/secret downstream
+                raise RuntimeError(f"AES-256-GCM decryption failed: {e}")
         
         # Try Fernet (legacy)
         if self.fernet:
@@ -1088,8 +1088,8 @@ class PegaProxDB:
                 # Fernet tokens start with 'gAAA' when base64 encoded
                 return self.fernet.decrypt(data.encode()).decode()
             except Exception as e:
-                # Not a valid Fernet token - might be plain text
-                logging.debug(f"Fernet decryption failed (might be plain text): {e}")
+                # Not a valid Fernet token - probably pre-encryption plaintext
+                logging.warning(f"Fernet decryption failed (treating as plaintext): {e}")
                 return data
         
         # Return as-is (probably plain text)

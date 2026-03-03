@@ -18,7 +18,7 @@ from pegaprox.core.db import get_db
 
 from pegaprox.utils.auth import require_auth, load_users, verify_password
 from pegaprox.utils.audit import log_audit
-from pegaprox.api.helpers import check_cluster_access
+from pegaprox.api.helpers import check_cluster_access, safe_error
 
 bp = Blueprint('nodes', __name__)
 
@@ -799,7 +799,7 @@ def get_smbios_autoconfig(cluster_id):
         return jsonify(settings)
     except Exception as e:
         logging.error(f"Error getting SMBIOS config: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SMBIOS config')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/smbios-autoconfig', methods=['PUT'])
@@ -898,7 +898,7 @@ def get_smbios_autoconfig_status(cluster_id, node):
         
     except Exception as e:
         logging.error(f"Error checking SMBIOS autoconfig status: {e}")
-        return jsonify({'installed': False, 'running': False, 'error': str(e)})
+        return jsonify({'installed': False, 'running': False, 'error': safe_error(e, 'Failed to get node status')})
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/smbios-autoconfig/deploy', methods=['POST'])
@@ -963,7 +963,7 @@ def deploy_smbios_autoconfig(cluster_id, node):
         
     except Exception as e:
         logging.error(f"Error deploying SMBIOS autoconfig: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'SMBIOS deploy failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/smbios-autoconfig', methods=['DELETE'])
@@ -1020,7 +1020,7 @@ def remove_smbios_autoconfig(cluster_id, node):
         
     except Exception as e:
         logging.error(f"Error removing SMBIOS autoconfig: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'SMBIOS removal failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/smbios-autoconfig/control', methods=['POST'])
@@ -1082,7 +1082,7 @@ def control_smbios_autoconfig(cluster_id, node):
         
     except Exception as e:
         logging.error(f"Error controlling SMBIOS autoconfig: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'SMBIOS service control failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/smbios-autoconfig/status-all', methods=['GET'])
@@ -1149,13 +1149,13 @@ def get_smbios_autoconfig_status_all(cluster_id):
                     ssh.close()
                     
             except Exception as e:
-                results[node_name] = {'installed': False, 'running': False, 'error': str(e)}
+                results[node_name] = {'installed': False, 'running': False, 'error': safe_error(e, 'Failed to get node status')}
         
         return jsonify(results)
         
     except Exception as e:
         logging.error(f"Error getting SMBIOS autoconfig status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SMBIOS status')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/smbios-autoconfig/deploy-all', methods=['POST'])
@@ -1232,7 +1232,7 @@ def deploy_smbios_autoconfig_all(cluster_id):
             results.append({'node': node, 'success': True})
             
         except Exception as e:
-            results.append({'node': node, 'success': False, 'error': str(e)})
+            results.append({'node': node, 'success': False, 'error': safe_error(e, 'SMBIOS deploy failed')})
     
     success_count = sum(1 for r in results if r['success'])
     usr = getattr(request, 'session', {}).get('user', 'system')
@@ -1302,7 +1302,7 @@ def get_custom_scripts(cluster_id):
         return jsonify([dict(s) for s in scripts] if scripts else [])
     except Exception as e:
         logging.error(f"Error loading scripts: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to load scripts')}), 500
 
 
 # Cleanup job for permanently deleting scripts after 20 days
@@ -1698,7 +1698,7 @@ def get_deleted_scripts(cluster_id):
         )
         return jsonify([dict(s) for s in scripts] if scripts else [])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to load deleted scripts')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/scripts/<script_id>/restore', methods=['POST'])

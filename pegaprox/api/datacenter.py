@@ -14,7 +14,7 @@ from pegaprox.core.db import get_db
 
 from pegaprox.utils.auth import require_auth
 from pegaprox.utils.audit import log_audit
-from pegaprox.api.helpers import get_connected_manager, check_cluster_access
+from pegaprox.api.helpers import get_connected_manager, check_cluster_access, safe_error
 
 bp = Blueprint('datacenter', __name__)
 
@@ -139,7 +139,7 @@ def _get_node_multipath_data(manager, node):
 
     except Exception as e:
         logging.error(f"Error getting multipath status for {node}: {e}")
-        result['error'] = str(e)
+        result['error'] = safe_error(e, 'Failed to get multipath status')
     finally:
         if ssh:
             try:
@@ -224,13 +224,13 @@ def get_cluster_multipath_status(cluster_id):
                     elif status == 'failed':
                         cluster_status['summary']['failed_devices'] += 1
             except Exception as e:
-                cluster_status['nodes'][node] = {'error': str(e), 'installed': False, 'running': False, 'devices': []}
+                cluster_status['nodes'][node] = {'error': safe_error(e, 'Failed to get node multipath data'), 'installed': False, 'running': False, 'devices': []}
         
         return jsonify(cluster_status)
         
     except Exception as e:
         logging.error(f"Error getting cluster multipath status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get cluster multipath status')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/multipath/setup', methods=['POST'])
@@ -365,7 +365,7 @@ def setup_multipath(cluster_id):
 
             except Exception as e:
                 node_result['success'] = False
-                node_result['error'] = str(e)
+                node_result['error'] = safe_error(e, 'Multipath setup failed on node')
             finally:
                 if ssh:
                     try:
@@ -390,7 +390,7 @@ def setup_multipath(cluster_id):
 
     except Exception as e:
         logging.error(f"Error in multipath setup: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Multipath setup failed')}), 500
 
 
 def generate_multipath_conf(vendor: str, policy: str) -> str:
@@ -580,7 +580,7 @@ def reconfigure_multipath(cluster_id, node):
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to reconfigure multipath')}), 500
     finally:
         if ssh:
             try:
@@ -625,9 +625,9 @@ def discover_iscsi_targets(cluster_id, node):
             })
         else:
             return jsonify({'error': response.text}), response.status_code
-            
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to discover iSCSI targets')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/iscsi/login', methods=['POST'])
@@ -695,7 +695,7 @@ def login_iscsi_target(cluster_id, node):
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to login to iSCSI target')}), 500
     finally:
         if ssh:
             try:
@@ -855,7 +855,7 @@ def get_sdn_overview(cluster_id):
         
     except Exception as e:
         logging.error(f"Error getting SDN overview: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN overview')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/zones', methods=['GET'])
@@ -881,7 +881,7 @@ def get_sdn_zones(cluster_id):
             return jsonify([])
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN zones')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/zones', methods=['POST'])
@@ -909,7 +909,7 @@ def create_sdn_zone(cluster_id):
             return jsonify({'success': True, 'message': 'Zone created'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create SDN zone')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/zones/<zone_id>', methods=['PUT'])
@@ -936,7 +936,7 @@ def update_sdn_zone(cluster_id, zone_id):
             return jsonify({'success': True, 'message': 'Zone updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update SDN zone')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/zones/<zone_id>', methods=['DELETE'])
@@ -962,7 +962,7 @@ def delete_sdn_zone(cluster_id, zone_id):
             return jsonify({'success': True, 'message': 'Zone deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete SDN zone')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets', methods=['GET'])
@@ -988,7 +988,7 @@ def get_sdn_vnets(cluster_id):
             return jsonify([])
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN vnets')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets', methods=['POST'])
@@ -1015,7 +1015,7 @@ def create_sdn_vnet(cluster_id):
             return jsonify({'success': True, 'message': 'VNet created'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create SDN vnet')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>', methods=['PUT'])
@@ -1042,7 +1042,7 @@ def update_sdn_vnet(cluster_id, vnet_id):
             return jsonify({'success': True, 'message': 'VNet updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update SDN vnet')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>', methods=['DELETE'])
@@ -1068,7 +1068,7 @@ def delete_sdn_vnet(cluster_id, vnet_id):
             return jsonify({'success': True, 'message': 'VNet deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete SDN vnet')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>/subnets', methods=['GET'])
@@ -1094,7 +1094,7 @@ def get_sdn_subnets(cluster_id, vnet_id):
             return jsonify([])
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN subnets')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>/subnets', methods=['POST'])
@@ -1121,7 +1121,7 @@ def create_sdn_subnet(cluster_id, vnet_id):
             return jsonify({'success': True, 'message': 'Subnet created'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create SDN subnet')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>/subnets/<subnet_id>', methods=['DELETE'])
@@ -1148,7 +1148,7 @@ def delete_sdn_subnet(cluster_id, vnet_id, subnet_id):
             return jsonify({'success': True, 'message': 'Subnet deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete SDN subnet')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/apply', methods=['POST'])
@@ -1174,7 +1174,7 @@ def apply_sdn_config(cluster_id):
             return jsonify({'success': True, 'message': 'SDN configuration applied'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to apply SDN config')}), 500
 
 
 # ============================================
@@ -1204,7 +1204,7 @@ def get_sdn_controllers(cluster_id):
             return jsonify([])
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN controllers')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/controllers', methods=['POST'])
@@ -1231,7 +1231,7 @@ def create_sdn_controller(cluster_id):
             return jsonify({'success': True, 'message': 'Controller created'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create SDN controller')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/controllers/<controller_id>', methods=['PUT'])
@@ -1258,7 +1258,7 @@ def update_sdn_controller(cluster_id, controller_id):
             return jsonify({'success': True, 'message': 'Controller updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update SDN controller')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/controllers/<controller_id>', methods=['DELETE'])
@@ -1284,7 +1284,7 @@ def delete_sdn_controller(cluster_id, controller_id):
             return jsonify({'success': True, 'message': 'Controller deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete SDN controller')}), 500
 
 
 # ============================================
@@ -1314,7 +1314,7 @@ def get_sdn_ipams(cluster_id):
             return jsonify([])
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN IPAMs')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/ipams', methods=['POST'])
@@ -1341,7 +1341,7 @@ def create_sdn_ipam(cluster_id):
             return jsonify({'success': True, 'message': 'IPAM created'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create IPAM')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/ipams/<ipam_id>', methods=['PUT'])
@@ -1368,7 +1368,7 @@ def update_sdn_ipam(cluster_id, ipam_id):
             return jsonify({'success': True, 'message': 'IPAM updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update IPAM')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/ipams/<ipam_id>', methods=['DELETE'])
@@ -1394,7 +1394,7 @@ def delete_sdn_ipam(cluster_id, ipam_id):
             return jsonify({'success': True, 'message': 'IPAM deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete IPAM')}), 500
 
 
 # ============================================
@@ -1424,7 +1424,7 @@ def get_sdn_dns(cluster_id):
             return jsonify([])
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN DNS configs')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/dns', methods=['POST'])
@@ -1451,7 +1451,7 @@ def create_sdn_dns(cluster_id):
             return jsonify({'success': True, 'message': 'DNS created'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create DNS config')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/dns/<dns_id>', methods=['PUT'])
@@ -1478,7 +1478,7 @@ def update_sdn_dns(cluster_id, dns_id):
             return jsonify({'success': True, 'message': 'DNS updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update DNS config')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/dns/<dns_id>', methods=['DELETE'])
@@ -1504,7 +1504,7 @@ def delete_sdn_dns(cluster_id, dns_id):
             return jsonify({'success': True, 'message': 'DNS deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete DNS config')}), 500
 
 
 # ============================================
@@ -1531,7 +1531,7 @@ def get_sdn_zone_details(cluster_id, zone_id):
             return jsonify(response.json().get('data', {}))
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN zone details')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>', methods=['GET'])
@@ -1554,7 +1554,7 @@ def get_sdn_vnet_details(cluster_id, vnet_id):
             return jsonify(response.json().get('data', {}))
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get SDN vnet details')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/sdn/vnets/<vnet_id>/subnets/<path:subnet_id>', methods=['PUT'])
@@ -1585,7 +1585,7 @@ def update_sdn_subnet(cluster_id, vnet_id, subnet_id):
             return jsonify({'success': True, 'message': 'Subnet updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update SDN subnet')}), 500
 
 
 # ============================================

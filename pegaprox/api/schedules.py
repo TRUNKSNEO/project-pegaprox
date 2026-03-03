@@ -16,7 +16,7 @@ from pegaprox.core.db import get_db
 
 from pegaprox.utils.auth import require_auth, load_users
 from pegaprox.utils.audit import log_audit
-from pegaprox.api.helpers import check_cluster_access
+from pegaprox.api.helpers import check_cluster_access, safe_error
 from pegaprox.api.nodes import cleanup_deleted_scripts, cleanup_orphaned_excluded_vms
 
 bp = Blueprint('schedules', __name__)
@@ -812,7 +812,7 @@ def delete_update_schedule(cluster_id):
         
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Schedule operation failed')}), 500
 
 
 def calculate_next_update_run(day: str, time_str: str) -> str:

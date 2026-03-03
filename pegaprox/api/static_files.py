@@ -18,7 +18,7 @@ from pegaprox.utils.rbac import (
     get_user_effective_role, get_role_permissions_for_user,
     DEFAULT_TENANT_ID,
 )
-from pegaprox.api.helpers import check_cluster_access
+from pegaprox.api.helpers import check_cluster_access, safe_error
 
 bp = Blueprint('static_files', __name__)
 
@@ -307,7 +307,7 @@ def get_vms_without_pool(cluster_id):
         
         return jsonify(vms_without_pool)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'File operation failed')}), 500
 
 
 def check_pool_permission(cluster_id: str, vmid: int, vm_type: str, required_perm: str, user: str = None) -> bool:

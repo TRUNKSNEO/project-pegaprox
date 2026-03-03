@@ -18,7 +18,7 @@ from pegaprox.utils.audit import log_audit
 from pegaprox.utils.rbac import (
     has_permission, filter_clusters_for_user, user_can_access_vm,
 )
-from pegaprox.api.helpers import get_connected_manager
+from pegaprox.api.helpers import get_connected_manager, safe_error
 
 bp = Blueprint('search', __name__)
 
@@ -403,7 +403,7 @@ def global_summary():
         return jsonify(summary)
     except Exception as e:
         logging.error(f"global_summary error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Search failed')}), 500
 
 
 @bp.route('/api/user/favorites', methods=['GET'])

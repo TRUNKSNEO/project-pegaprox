@@ -114,7 +114,7 @@ def get_datacenter_status(cluster_id):
             }
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get datacenter status')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms', methods=['GET'])
@@ -160,7 +160,7 @@ def get_cluster_vms_list(cluster_id):
         return jsonify({'vms': vms})
     except Exception as e:
         logging.error(f"Error fetching VMs for cluster {cluster_id}: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to list cluster VMs')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/cluster-info', methods=['GET'])
@@ -310,9 +310,9 @@ def get_join_info(cluster_id):
             result['fingerprint'] = f'Run "pvecm status" on {host} to get fingerprint'
         
         return jsonify(result)
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get cluster info')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/options', methods=['GET'])
@@ -335,7 +335,7 @@ def get_datacenter_options(cluster_id):
             return jsonify(response.json().get('data', {}))
         return jsonify({})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get datacenter options')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/options', methods=['PUT'])
@@ -368,7 +368,7 @@ def set_datacenter_options(cluster_id):
             return jsonify({'success': True, 'message': 'Options updated'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to set datacenter options')}), 500
 
 
 # Storage API
@@ -465,7 +465,7 @@ def get_datastores(cluster_id):
             'nodes': nodes
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get storage list')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datastores/<storage_name>/content', methods=['GET'])
@@ -522,7 +522,7 @@ def get_datastore_content(cluster_id, storage_name):
         return jsonify([])
     except Exception as e:
         logging.error(f"Error getting datastore content: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get datastore content')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datastores/<storage_name>/content/<path:volid>', methods=['DELETE'])
@@ -622,7 +622,7 @@ def delete_datastore_content(cluster_id, storage_name, volid):
             
     except Exception as e:
         logging.error(f"Error deleting content: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete datastore content')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datastores/<storage_name>/upload', methods=['POST'])
@@ -693,7 +693,7 @@ def upload_to_datastore(cluster_id, storage_name):
             
     except Exception as e:
         logging.error(f"Error uploading: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to upload to datastore')}), 500
 
 
 # NS: Download ISO from URL - Jan 2026
@@ -872,7 +872,7 @@ def download_iso_from_url(cluster_id, storage_name):
             
     except Exception as e:
         logging.error(f"Error starting download: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to start URL download')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datastores/<storage_name>/download-status/<task_id>', methods=['GET'])
@@ -966,7 +966,7 @@ def get_vm_backups(cluster_id, node, vm_type, vmid):
         
     except Exception as e:
         logging.error(f"[BACKUP] Error getting VM backups: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get VM backups')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vm_type>/<int:vmid>/backups/create', methods=['POST'])
@@ -1025,7 +1025,7 @@ def create_vm_backup(cluster_id, node, vm_type, vmid):
         
     except Exception as e:
         logging.error(f"[BACKUP] Error creating backup: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create backup')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vm_type>/<int:vmid>/backups/restore', methods=['POST'])
@@ -1097,7 +1097,7 @@ def restore_vm_backup(cluster_id, node, vm_type, vmid):
         
     except Exception as e:
         logging.error(f"[BACKUP] Error restoring backup: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to restore backup')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vm_type>/<int:vmid>/backups/<path:volid>', methods=['DELETE'])
@@ -1147,7 +1147,7 @@ def delete_vm_backup(cluster_id, node, vm_type, vmid, volid):
         
     except Exception as e:
         logging.error(f"[BACKUP] Error deleting backup: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete backup')}), 500
 @bp.route('/api/clusters/<cluster_id>/datacenter/replication', methods=['GET'])
 @require_auth(perms=["cluster.view"])
 def get_replication_jobs(cluster_id):
@@ -1168,7 +1168,7 @@ def get_replication_jobs(cluster_id):
             return jsonify(response.json().get('data', []))
         return jsonify([])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get replication jobs')}), 500
 
 
 # MK: HA Manager Status API
@@ -1251,7 +1251,7 @@ def set_firewall_options(cluster_id):
             return jsonify({'success': True, 'message': 'Firewall options updated'})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to set firewall options')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/firewall/rules', methods=['GET'])
@@ -1299,7 +1299,7 @@ def create_firewall_rule(cluster_id):
             return jsonify({'success': True, 'message': 'Firewall rule created'})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create firewall rule')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/firewall/rules/<int:pos>', methods=['PUT'])
@@ -1323,7 +1323,7 @@ def update_firewall_rule(cluster_id, pos):
             return jsonify({'success': True, 'message': 'Firewall rule updated'})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update firewall rule')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/firewall/rules/<int:pos>', methods=['DELETE'])
@@ -1346,7 +1346,7 @@ def delete_firewall_rule(cluster_id, pos):
             return jsonify({'success': True, 'message': 'Firewall rule deleted'})
         return jsonify({'error': response.text}), response.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete firewall rule')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/firewall/groups', methods=['GET'])
@@ -1369,7 +1369,7 @@ def get_firewall_groups(cluster_id):
             return jsonify(response.json().get('data', []))
         return jsonify([])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get firewall groups')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/firewall/aliases', methods=['GET'])
@@ -1392,7 +1392,7 @@ def get_firewall_aliases(cluster_id):
             return jsonify(response.json().get('data', []))
         return jsonify([])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get firewall aliases')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/firewall/ipset', methods=['GET'])
@@ -1415,7 +1415,7 @@ def get_firewall_ipsets(cluster_id):
             return jsonify(response.json().get('data', []))
         return jsonify([])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get firewall IP sets')}), 500
 
 
 # ============================================
@@ -1461,7 +1461,7 @@ def set_vm_firewall_options(cluster_id, node, vmtype, vmid):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to set VM firewall options')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/rules', methods=['GET'])
@@ -1508,7 +1508,7 @@ def create_vm_firewall_rule(cluster_id, node, vmtype, vmid):
         logging.warning(f"VM FW rule create failed: {r.status_code} data={data} pve_response={r.text[:300]}")
         return jsonify({'error': pve_err, 'status': r.status_code}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create VM firewall rule')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/rules/<int:pos>', methods=['PUT'])
@@ -1526,7 +1526,7 @@ def update_vm_firewall_rule(cluster_id, node, vmtype, vmid, pos):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update VM firewall rule')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/rules/<int:pos>', methods=['DELETE'])
@@ -1545,7 +1545,7 @@ def delete_vm_firewall_rule(cluster_id, node, vmtype, vmid, pos):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete VM firewall rule')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/aliases', methods=['GET'])
@@ -1580,7 +1580,7 @@ def create_vm_firewall_alias(cluster_id, node, vmtype, vmid):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create VM firewall alias')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/aliases/<name>', methods=['PUT'])
@@ -1598,7 +1598,7 @@ def update_vm_firewall_alias(cluster_id, node, vmtype, vmid, name):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to update VM firewall alias')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/aliases/<name>', methods=['DELETE'])
@@ -1615,7 +1615,7 @@ def delete_vm_firewall_alias(cluster_id, node, vmtype, vmid, name):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete VM firewall alias')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/ipset', methods=['GET'])
@@ -1650,7 +1650,7 @@ def create_vm_firewall_ipset(cluster_id, node, vmtype, vmid):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to create VM firewall IP set')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/ipset/<name>', methods=['GET'])
@@ -1685,7 +1685,7 @@ def add_vm_firewall_ipset_entry(cluster_id, node, vmtype, vmid, name):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to add IP set entry')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/ipset/<name>/<path:cidr>', methods=['DELETE'])
@@ -1702,7 +1702,7 @@ def delete_vm_firewall_ipset_entry(cluster_id, node, vmtype, vmid, name, cidr):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete IP set entry')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/ipset/<name>', methods=['DELETE'])
@@ -1719,7 +1719,7 @@ def delete_vm_firewall_ipset(cluster_id, node, vmtype, vmid, name):
             return jsonify({'success': True})
         return jsonify({'error': r.text}), r.status_code
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to delete VM firewall IP set')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/<vmtype>/<vmid>/firewall/refs', methods=['GET'])
@@ -1782,7 +1782,7 @@ def get_pci_mappings(cluster_id):
             return jsonify(response.json().get('data', []))
         return jsonify([])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get PCI mappings')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/datacenter/mapping/usb', methods=['GET'])
@@ -1805,7 +1805,7 @@ def get_usb_mappings(cluster_id):
             return jsonify(response.json().get('data', []))
         return jsonify([])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get USB mappings')}), 500
 
 
 # Maintenance Mode API Routes
@@ -2267,7 +2267,7 @@ def join_node_to_cluster(cluster_id):
         return jsonify({'success': False, 'error': 'SSH authentication failed'}), 401
     except Exception as e:
         logging.error(f"Error joining node to cluster: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': safe_error(e, 'Failed to join node to cluster')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node_name>/can-remove', methods=['GET'])
@@ -2354,7 +2354,7 @@ def check_can_remove_node(cluster_id, node_name):
         })
     except Exception as e:
         logging.error(f"[RemoveNode] check_can_remove error: {e}")
-        return jsonify({'can_remove': False, 'error': str(e), 'blockers': [str(e)]}), 200
+        return jsonify({'can_remove': False, 'error': safe_error(e, 'Failed to check node removal'), 'blockers': [safe_error(e, 'Failed to check node removal')]}), 200
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node_name>/cluster-membership', methods=['DELETE'])
@@ -2647,7 +2647,7 @@ def remove_node_from_cluster(cluster_id, node_name):
         return jsonify({'success': False, 'error': 'SSH authentication failed. Check cluster credentials.'}), 401
     except Exception as e:
         logging.error(f"Error removing node from cluster: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': safe_error(e, 'Failed to remove node from cluster')}), 500
 
 
 # Node Action API (reboot/shutdown)
@@ -2742,11 +2742,11 @@ def node_action_api(cluster_id, node_name, action):
         except Exception as e:
             ssh.close()
             logging.error(f"Error executing {action} on {node_name}: {e}")
-            return jsonify({'error': str(e)}), 500
-            
+            return jsonify({'error': safe_error(e, 'Failed to execute node action')}), 500
+
     except Exception as e:
         logging.error(f"Node action error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Node action failed')}), 500
 
 
 # Node Update API Routes
@@ -3318,7 +3318,7 @@ def get_node_pci_devices(cluster_id, node):
         return jsonify([])
     except Exception as e:
         logging.error(f"Error getting PCI devices: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get PCI devices')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes/<node>/hardware/usb', methods=['GET'])
@@ -3348,7 +3348,7 @@ def get_node_usb_devices(cluster_id, node):
         return jsonify([])
     except Exception as e:
         logging.error(f"Error getting USB devices: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get USB devices')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/qemu/<int:vmid>/passthrough', methods=['GET'])
@@ -3411,7 +3411,7 @@ def get_vm_passthrough_devices(cluster_id, node, vmid):
         
         return jsonify(passthrough)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to get passthrough devices')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/qemu/<int:vmid>/passthrough/pci', methods=['POST'])
@@ -3471,7 +3471,7 @@ def add_pci_passthrough(cluster_id, node, vmid):
             
     except Exception as e:
         logging.error(f"Error adding PCI passthrough: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to add PCI passthrough')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/qemu/<int:vmid>/passthrough/usb', methods=['POST'])
@@ -3536,7 +3536,7 @@ def add_usb_passthrough(cluster_id, node, vmid):
             
     except Exception as e:
         logging.error(f"Error adding USB passthrough: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to add USB passthrough')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/qemu/<int:vmid>/passthrough/serial', methods=['POST'])
@@ -3584,7 +3584,7 @@ def add_serial_port(cluster_id, node, vmid):
             
     except Exception as e:
         logging.error(f"Error adding serial port: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to add serial port')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/vms/<node>/qemu/<int:vmid>/passthrough/<device_type>/<key>', methods=['DELETE'])
@@ -3625,7 +3625,7 @@ def remove_passthrough_device(cluster_id, node, vmid, device_type, key):
             
     except Exception as e:
         logging.error(f"Error removing passthrough device: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Failed to remove passthrough device')}), 500
 
 
 def _parse_pci_config(config_str):
@@ -6842,7 +6842,7 @@ def cross_cluster_migrate_api():
         if target_token:
             target_manager.delete_api_token(token_name)
         logging.error(f"Cross-cluster migration error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'Cross-cluster migration failed')}), 500
 
 
 @bp.route('/api/clusters/<cluster_id>/nodes-status', methods=['GET'])

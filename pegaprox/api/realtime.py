@@ -150,18 +150,9 @@ def sse_updates():
             allowed_clusters = token_data['allowed_clusters']
             auth_method = 'token'
 
-    if not user and session_id:
-        # Fallback to session auth (legacy)
-        session = validate_session(session_id)
-        if session:
-            user = session.get('user', 'unknown')
-            users = load_users()
-            user_data = users.get(user, {})
-            allowed_clusters = get_user_clusters(user_data)
-            auth_method = 'session'
-
+    # NS Mar 2026 - removed session_id fallback, token-only auth for SSE
     if not user:
-        return jsonify({'error': 'Authentication required. Use token or session parameter.'}), 401
+        return jsonify({'error': 'Authentication required. Provide a valid SSE token.'}), 401
 
     client_id = str(uuid.uuid4())
     message_queue = queue_module.Queue(maxsize=100)

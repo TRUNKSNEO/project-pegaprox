@@ -13,6 +13,15 @@ import requests
 from datetime import datetime
 from urllib.parse import urlencode
 
+# MK Mar 2026 - PyJWT for proper signature verification
+try:
+    import jwt as pyjwt
+    from jwt import PyJWKClient
+    PYJWT_AVAILABLE = True
+except ImportError:
+    PYJWT_AVAILABLE = False
+    logging.warning("[OIDC] PyJWT not installed - JWT signature verification disabled")
+
 from pegaprox.core.db import get_db
 from pegaprox.globals import users_db
 from pegaprox.models.permissions import ROLE_VIEWER, ROLE_ADMIN, ROLE_USER
@@ -83,6 +92,7 @@ def get_oidc_settings() -> dict:
 
 
 _oidc_discovery_cache = {}  # authority_url -> {'data': {...}, 'expires': timestamp}
+_jwks_clients = {}  # jwks_uri -> PyJWKClient instance (has its own cache)
 
 def get_oidc_endpoints(config: dict) -> dict:
     """Build OIDC endpoint URLs based on provider
@@ -224,20 +234,57 @@ def oidc_exchange_code(config: dict, code: str) -> dict:
         return {'error': str(e)}
 
 
-def oidc_decode_id_token(id_token: str, expected_nonce: str = None) -> dict:
-    """Decode JWT ID token without full signature verification
+def oidc_decode_id_token(id_token: str, expected_nonce: str = None,
+                         config: dict = None) -> dict:
+    """Decode and verify JWT ID token signature using JWKS
 
-    MK: We trust the token because it came directly from the token endpoint over HTTPS.
-    LW Feb 2026: Added exp validation and nonce verification.
-    TODO: Full JWKS signature verification for defense-in-depth.
+    MK Mar 2026: Now verifies signature via JWKS endpoint (PyJWT).
+    Falls back to unsigned decode if PyJWT unavailable or JWKS fetch fails,
+    so existing deployments don't break during upgrade.
     """
+    # NS Mar 2026 - try proper signature verification first
+    if PYJWT_AVAILABLE and config:
+        try:
+            endpoints = get_oidc_endpoints(config)
+            jwks_uri = endpoints.get('jwks', '')
+
+            if jwks_uri:
+                if jwks_uri not in _jwks_clients:
+                    _jwks_clients[jwks_uri] = PyJWKClient(jwks_uri, cache_keys=True, lifespan=3600)
+
+                signing_key = _jwks_clients[jwks_uri].get_signing_key_from_jwt(id_token)
+
+                claims = pyjwt.decode(
+                    id_token,
+                    signing_key.key,
+                    algorithms=["RS256", "ES256"],
+                    audience=config.get('client_id'),
+                    options={
+                        "verify_exp": True,
+                        "verify_aud": True,
+                        "verify_iss": False,  # issuer varies by provider config
+                        "require": ["exp", "iat", "sub"],
+                    },
+                    leeway=300,  # 5 min clock skew
+                )
+
+                # LW: validate nonce separately (PyJWT doesn't do it)
+                if expected_nonce and claims.get('nonce') != expected_nonce:
+                    logging.warning(f"[OIDC] Nonce mismatch after sig verification")
+                    return {'error': 'OIDC nonce mismatch - possible replay attack'}
+
+                return claims
+
+        except Exception as e:
+            # MK: don't break login if JWKS is temporarily unreachable
+            logging.warning(f"[OIDC] JWKS verification failed, falling back to unverified decode: {e}")
+
+    # Fallback: decode without signature check (pre-PyJWT behavior)
     try:
-        # JWT = header.payload.signature - we just need the payload
         parts = id_token.split('.')
         if len(parts) != 3:
             return {'error': 'Invalid JWT format'}
 
-        # Base64url decode payload (add padding)
         payload = parts[1]
         padding = 4 - len(payload) % 4
         if padding != 4:
@@ -252,7 +299,6 @@ def oidc_decode_id_token(id_token: str, expected_nonce: str = None) -> dict:
             logging.warning(f"[OIDC] ID token expired: exp={exp}, now={time.time():.0f}")
             return {'error': 'ID token has expired'}
 
-        # LW Feb 2026 - validate nonce if provided
         if expected_nonce and claims.get('nonce') != expected_nonce:
             logging.warning(f"[OIDC] Nonce mismatch: expected={expected_nonce[:8]}..., got={str(claims.get('nonce', ''))[:8]}...")
             return {'error': 'OIDC nonce mismatch - possible replay attack'}

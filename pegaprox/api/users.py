@@ -29,7 +29,7 @@ from pegaprox.utils.rbac import (
     get_pool_membership_cache, invalidate_pool_cache, get_vm_pool_cached,
     DEFAULT_TENANT_ID, ROLE_TEMPLATES,
 )
-from pegaprox.api.helpers import load_server_settings, save_server_settings, get_login_settings, check_cluster_access
+from pegaprox.api.helpers import load_server_settings, save_server_settings, get_login_settings, check_cluster_access, safe_error
 
 bp = Blueprint('users', __name__)
 
@@ -528,7 +528,7 @@ def get_security_audit(cluster_id):
         
     except Exception as e:
         logging.error(f"Security audit error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'User operation failed')}), 500
 
 
 def is_valid_role(role_id):
@@ -1348,7 +1348,7 @@ def delete_vm_acl(cluster_id, vmid):
         return jsonify({'success': True, 'deleted': deleted})
     except Exception as e:
         logging.error(f"Failed to delete VM ACL: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': safe_error(e, 'User operation failed')}), 500
 
 
 # ==================== RESOURCE POOLS - MK Jan 2026 ====================
