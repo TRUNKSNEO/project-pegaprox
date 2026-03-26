@@ -95,6 +95,20 @@ def _require_string(body, field):
     return value.strip(), None
 
 
+def _get_optional_string(body, field):
+    """
+    Extract an optional string field from a dict.
+    Returns (stripped_value, None) if present and a string, (None, None) if absent,
+    or (None, error_response_tuple) if present but not a string.
+    """
+    if field not in body:
+        return None, None
+    value = body[field]
+    if not isinstance(value, str):
+        return None, (jsonify({'error': f"'{field}' must be a string"}), 400)
+    return value.strip(), None
+
+
 def _parse_optional_int(body, field):
     """
     Parse an optional integer field from a dict.
@@ -206,8 +220,12 @@ def ha_handler():
         if err:
             return err
 
-        state = body.get('state', 'started')
-        if not isinstance(state, str) or state not in ('started', 'stopped', 'enabled', 'disabled'):
+        state, err = _get_optional_string(body, 'state')
+        if err:
+            return err
+        if state is None:
+            state = 'started'
+        elif state not in ('started', 'stopped', 'enabled', 'disabled'):
             return jsonify({'error': f"Invalid state '{state}'. Choose: started, stopped, enabled, disabled"}), 400
 
         max_restart, err = _parse_optional_int(body, 'max_restart')
@@ -264,9 +282,11 @@ def ha_handler():
             return err
 
         payload = {}
-        if 'state' in body:
-            state = body['state']
-            if not isinstance(state, str) or state not in ('started', 'stopped', 'enabled', 'disabled'):
+        state, err = _get_optional_string(body, 'state')
+        if err:
+            return err
+        if state is not None:
+            if state not in ('started', 'stopped', 'enabled', 'disabled'):
                 return jsonify({'error': f"Invalid state '{state}'"}), 400
             payload['state'] = state
 
