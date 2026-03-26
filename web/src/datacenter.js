@@ -1858,7 +1858,12 @@
                                                             {s.path || s.server || s.pool || s.portal || s.export || '-'}
                                                         </td>
                                                         <td className="p-3 text-sm text-gray-400">
-                                                            {s.nodes || <span className="text-gray-500 italic">All</span>}
+                                                            {s.nodes ? (() => {
+                                                                const nodeList = s.nodes.split(',').map(n => n.trim());
+                                                                const show = nodeList.slice(0, 2);
+                                                                const rest = nodeList.length - show.length;
+                                                                return <span>{show.join(', ')}{rest > 0 && <span className="text-xs text-gray-500 ml-1 cursor-help" title={nodeList.join(', ')}>+{rest} more</span>}</span>;
+                                                            })() : <span className="text-gray-500 italic">All</span>}
                                                         </td>
                                                         <td className="p-3">
                                                             {s.shared ? (

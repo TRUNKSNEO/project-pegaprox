@@ -373,7 +373,7 @@ def install_debsecan(cluster_id):
 
     results = []
     for node_name in node_status:
-        out = mgr._ssh_node_output(node_name, 'apt-get install -y debsecan 2>&1 | tail -3', timeout=120)
+        out = mgr._ssh_node_output(node_name, 'DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install -y debsecan 2>&1 | tail -3', timeout=120)
         if out is not None:
             results.append({'node': node_name, 'success': True, 'output': out.strip()[-200:]})
         else:
