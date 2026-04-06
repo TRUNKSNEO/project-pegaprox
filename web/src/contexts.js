@@ -148,6 +148,12 @@
                         const d = await r.json();
                         // NS: removed session response log (leaked session_id to console)
                         if (d.authenticated) {
+                            // NS: portal_only users must not access main dashboard
+                            if (d.user?.portal_only && !window.location.pathname.startsWith('/portal')) {
+                                logout();
+                                setLoading(false);
+                                return;
+                            }
                             setUser(d.user);
                             setIsAuthenticated(true);
                             // NS: Get session_id from response for WebSocket auth

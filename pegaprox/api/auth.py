@@ -1004,9 +1004,12 @@ def auth_change_password():
 
     save_users(users_db)
     
-    # Invalidate all other sessions for this user (keep current session)
+    # Invalidate sessions — admins lose ALL sessions (security: hijacked session can't persist)
     current_session_id = request.cookies.get('session_id') or request.headers.get('X-Session-ID')
-    sessions_removed = invalidate_all_user_sessions(username, except_session=current_session_id)
+    if user.get('role') == ROLE_ADMIN:
+        sessions_removed = invalidate_all_user_sessions(username)  # no exception, force re-login
+    else:
+        sessions_removed = invalidate_all_user_sessions(username, except_session=current_session_id)
     
     logging.info(f"User '{username}' changed their password")
     log_audit(username, 'user.password_changed', f"Password changed, {sessions_removed} other sessions invalidated")
@@ -1091,8 +1094,9 @@ def verify_2fa_setup():
     username = request.session['user']
     
     # NS: only 1M possible 6-digit codes, easy to brute force without this
-    if not check_auth_action_rate_limit(f'totp_verify:{username}', max_attempts=5, window=300):
-        return jsonify({'error': 'Too many verification attempts. Try again in 5 minutes.'}), 429
+    # NS: tightened from 5/300s to 3/120s — reduces brute-force success probability
+    if not check_auth_action_rate_limit(f'totp_verify:{username}', max_attempts=3, window=120):
+        return jsonify({'error': 'Too many verification attempts. Try again in 2 minutes.'}), 429
     
     logging.info(f"2FA verify requested for user: {username}, code length: {len(code)}")  # MK: Debug
     users_db = load_users()

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Client Portal</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/tailwind.min.css">
     <style>
         :root { --accent: #e57000; --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; }
         body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; }
@@ -197,6 +197,14 @@ async function loadSnapshots(vm){
 async function createSnapshot(vm,name,desc){
     try{const r=await api(`${P}/vm/snapshots`,{method:'POST',body:{cluster_id:vm.cluster_id,vmid:vm.vmid,name,description:desc}});
     if(r&&r.ok){const d=await r.json();if(d.success){toast('Snapshot created','success');loadSnapshots(vm);}else toast(d.error,'error');}
+    }catch(e){toast('Error','error');}
+}
+
+async function deleteSnapshot(vm,snapname){
+    if(!confirm(`Delete snapshot "${snapname}"? This cannot be undone.`))return;
+    try{
+        const r=await api(`${P}/vm/snapshot-delete`,{method:'POST',body:{cluster_id:vm.cluster_id,vmid:vm.vmid,snapname}});
+        if(r&&r.ok){const d=await r.json();if(d.success){toast('Snapshot deleted','success');loadSnapshots(vm);}else toast(d.error||'Delete failed','error');}
     }catch(e){toast('Error','error');}
 }
 
@@ -397,6 +405,7 @@ function renderSnapshotsModal(){
                     <div style="display:flex;align-items:center;gap:8px;margin-left:12px;flex-shrink:0">
                         <span class="text-xs" style="color:var(--muted)">${s.snaptime?new Date(s.snaptime*1000).toLocaleDateString():''}</span>
                         <button class="btn btn-ghost text-xs" style="padding:2px 8px" onclick="pRollback('${m.vm.cluster_id}',${m.vm.vmid},'${s.name}')" title="Rollback to this snapshot">&#x21A9; Revert</button>
+                        <button class="btn btn-ghost text-xs" style="padding:2px 8px;color:#da3633" onclick="pDeleteSnap('${m.vm.cluster_id}',${m.vm.vmid},'${s.name}')" title="Delete snapshot">&#x2715;</button>
                     </div>
                 </div>`).join('')}</div>`:`<p class="text-sm mb-4" style="color:var(--muted)">No snapshots yet.</p>`}
             ${canCreate?`<div style="border-top:1px solid var(--border);padding-top:12px">
@@ -508,7 +517,7 @@ async function initVNC(container){
         const rfb=new window.RFB(container,wsUrl,{credentials:{password}});
         rfb.scaleViewport=true;rfb.resizeSession=true;
         rfb.addEventListener('disconnect',()=>{container.innerHTML='<p style="color:var(--muted);padding:20px;text-align:center">Console disconnected</p>';});
-    }catch(e){container.innerHTML=`<p style="color:#da3633;padding:20px">${e.message}</p>`;}
+    }catch(e){const p=document.createElement('p');p.style.cssText='color:#da3633;padding:20px';p.textContent=e.message;container.innerHTML='';container.appendChild(p);}
 }
 
 // global handlers for onclick attrs
@@ -517,6 +526,7 @@ window.pConsole=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===
 window.pSnaps=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)loadSnapshots(vm);};
 window.pCreateSnap=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);const n=document.getElementById('snap-name')?.value||'';if(vm)createSnapshot(vm,n,'');};
 window.pRollback=function(c,v,snapname){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)rollbackSnapshot(vm,snapname);};
+window.pDeleteSnap=function(c,v,snapname){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)deleteSnapshot(vm,snapname);};
 window.closeModal=function(){S.modal=null;render();};
 
 // auto-refresh every 30s

@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.9.4.1--beta-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-0.9.5--beta-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/python-3.8+-green" alt="Python"/>
   <img src="https://img.shields.io/badge/license-AGPL--3.0--License-orange" alt="License"/>
 </p>
@@ -83,7 +83,13 @@ PegaProx is a powerful web-based management interface for Proxmox VE and XCP-ng 
 - 📜 **Audit Logging** - Track all user actions with IP addresses
 - 🔧 **Custom Scripts** - Run scripts across nodes
 - 💿 **Ceph Management** - Monitor and manage Ceph storage pools, RBD mirroring
-- 🔐 **ACME / Let's Encrypt** - Automatic SSL certificate renewal with HTTP-01 challenge
+- 🔐 **ACME / Let's Encrypt** - Automatic SSL certificate renewal with HTTP-01 challenge (+ custom ACME CAs)
+- 📋 **Integrated Syslog Server** - Receive and view syslog messages (UDP/TCP) with filtering, search, and severity-based coloring
+
+### Plugins
+- 🌐 **Client Portal** - Self-service portal for hosting customers with VM power actions, noVNC console, snapshots, 2FA, and password management
+- 📊 **Public Status Page** - Cluster health dashboard for monitoring screens with URL-based auth key (no login required)
+- 🔌 **Plugin Config Editor** - Edit plugin configuration directly from the UI
 
 ### Advanced Features
 - 🌐 **Offline Mode** - Works without internet (local assets)

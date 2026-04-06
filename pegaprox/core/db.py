@@ -99,6 +99,14 @@ class PegaProxDB:
         
         # Load or generate AES-256 key
         if os.path.exists(aes_key_file):
+            # verify permissions on existing key file
+            try:
+                mode = os.stat(aes_key_file).st_mode & 0o777
+                if mode != 0o600:
+                    logging.warning(f"[SECURITY] Fixing key file permissions: {oct(mode)} → 0o600")
+                    os.chmod(aes_key_file, 0o600)
+            except Exception:
+                pass
             with open(aes_key_file, 'rb') as f:
                 aes_key = f.read()
             if len(aes_key) != 32:
@@ -114,8 +122,9 @@ class PegaProxDB:
             try:
                 os.chmod(aes_key_file, 0o600)
             except Exception as e:
-                logging.warning(f"Could not set key file permissions: {e}")
-            logging.info("Generated new AES-256-GCM encryption key (Military Grade)")
+                logging.error(f"SECURITY: Could not set key file permissions: {e}")
+                raise RuntimeError(f"Cannot secure encryption key file: {e}")
+            logging.info("Generated new AES-256-GCM encryption key")
         
         self.aesgcm = AESGCM(aes_key)
         self.aes_key = aes_key  # Store raw key for HMAC signing

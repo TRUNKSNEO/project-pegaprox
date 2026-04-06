@@ -126,8 +126,10 @@
                 ssl_cert_file: null,
                 ssl_key_file: null,
                 acme_enabled: false,
+                acme_provider: 'letsencrypt',
                 acme_email: '',
                 acme_staging: false,
+                acme_directory_url: '',
                 cert_info: null,
                 reverse_proxy_enabled: false,
                 trusted_proxies: '',
@@ -160,7 +162,8 @@
             const [loginBgFile, setLoginBgFile] = useState(null);
             const [loginBgError, setLoginBgError] = useState(null);
             const [discoveredPlugins, setDiscoveredPlugins] = useState([]);
-            
+            const [editingPluginConfig, setEditingPluginConfig] = useState(null); // {id, name, config}
+
             // Password policy state - NS Jan 2026
             const [passwordPolicy, setPasswordPolicy] = useState({
                 min_length: 8,
@@ -917,7 +920,9 @@
                             ssl_cert: data.ssl_cert_exists ? '(Zertifikat vorhanden)' : '',
                             ssl_key: data.ssl_key_exists ? '(Schlüssel vorhanden)' : '',
                             acme_enabled: data.acme_enabled || false,
+                            acme_provider: data.acme_provider || 'letsencrypt',
                             acme_email: data.acme_email || '',
+                            acme_directory_url: data.acme_directory_url || '',
                             acme_staging: data.acme_staging || false,
                             cert_info: data.cert_info || null,
                             http_redirect_port: data.http_redirect_port || 0,
@@ -1004,6 +1009,7 @@
                             oidc_default_role: data.oidc_default_role || 'viewer',
                             oidc_auto_create_users: data.oidc_auto_create_users !== false,
                             oidc_button_text: data.oidc_button_text || 'Sign in with Microsoft',
+                            oidc_skip_jwt_verification: data.oidc_skip_jwt_verification || false,
                             oidc_group_mappings: data.oidc_group_mappings || [],
                         }));
                     }
@@ -1192,8 +1198,12 @@
                     addToast(t('domain') + ' required', 'error');
                     return;
                 }
-                if (!serverSettings.acme_email) {
+                if (serverSettings.acme_provider === 'letsencrypt' && !serverSettings.acme_email) {
                     addToast(t('acmeEmail') + ' required', 'error');
+                    return;
+                }
+                if (serverSettings.acme_provider === 'custom' && !serverSettings.acme_directory_url) {
+                    addToast('ACME Directory URL required', 'error');
                     return;
                 }
                 setAcmeLoading(true);
@@ -1204,8 +1214,10 @@
                         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                         body: JSON.stringify({
                             domain: serverSettings.domain,
+                            provider: serverSettings.acme_provider || 'letsencrypt',
                             email: serverSettings.acme_email,
                             staging: serverSettings.acme_staging,
+                            directory_url: serverSettings.acme_provider === 'custom' ? serverSettings.acme_directory_url : '',
                         })
                     });
                     const data = await resp.json();
@@ -4808,6 +4820,32 @@
 
                                             <div className="space-y-3">
                                                 <div>
+                                                    <label className="block text-sm text-gray-400 mb-1">{t('acmeProvider') || 'ACME Provider'}</label>
+                                                    <select
+                                                        value={serverSettings.acme_provider || 'letsencrypt'}
+                                                        onChange={e => setServerSettings({...serverSettings, acme_provider: e.target.value, acme_directory_url: e.target.value === 'custom' ? serverSettings.acme_directory_url : ''})}
+                                                        className="w-full px-3 py-2 bg-proxmox-darker border border-proxmox-border rounded-lg text-white text-sm"
+                                                    >
+                                                        <option value="letsencrypt">Let's Encrypt</option>
+                                                        <option value="custom">{t('acmeProviderCustom') || 'Custom ACME CA'}</option>
+                                                    </select>
+                                                </div>
+
+                                                {serverSettings.acme_provider === 'custom' && (
+                                                    <div>
+                                                        <label className="block text-sm text-gray-400 mb-1">{t('acmeDirectoryUrl') || 'ACME Directory URL'}</label>
+                                                        <input
+                                                            type="url"
+                                                            value={serverSettings.acme_directory_url || ''}
+                                                            onChange={e => setServerSettings({...serverSettings, acme_directory_url: e.target.value})}
+                                                            placeholder="https://step-ca.example.com/acme/acme/directory"
+                                                            className="w-full px-3 py-2 bg-proxmox-darker border border-proxmox-border rounded-lg text-white text-sm"
+                                                        />
+                                                        <p className="text-xs text-gray-500 mt-1">{t('acmeDirectoryUrlHint') || 'ACME directory endpoint of your CA (must be HTTPS)'}</p>
+                                                    </div>
+                                                )}
+
+                                                <div>
                                                     <label className="block text-sm text-gray-400 mb-1">{t('acmeEmail')}</label>
                                                     <input
                                                         type="email"
@@ -4816,19 +4854,21 @@
                                                         placeholder="admin@example.com"
                                                         className="w-full px-3 py-2 bg-proxmox-darker border border-proxmox-border rounded-lg text-white text-sm"
                                                     />
-                                                    <p className="text-xs text-gray-500 mt-1">{t('acmeEmailHint')}</p>
+                                                    <p className="text-xs text-gray-500 mt-1">{serverSettings.acme_provider === 'letsencrypt' ? t('acmeEmailHint') : (t('acmeEmailOptionalHint') || 'Optional for custom ACME servers')}</p>
                                                 </div>
 
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={serverSettings.acme_staging}
-                                                        onChange={e => setServerSettings({...serverSettings, acme_staging: e.target.checked})}
-                                                        className="rounded border-proxmox-border bg-proxmox-darker"
-                                                    />
-                                                    <span className="text-sm text-gray-300">{t('acmeStaging')}</span>
-                                                    <span className="text-xs text-gray-500">({t('acmeStagingHint')})</span>
-                                                </label>
+                                                {serverSettings.acme_provider === 'letsencrypt' && (
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={serverSettings.acme_staging}
+                                                            onChange={e => setServerSettings({...serverSettings, acme_staging: e.target.checked})}
+                                                            className="rounded border-proxmox-border bg-proxmox-darker"
+                                                        />
+                                                        <span className="text-sm text-gray-300">{t('acmeStaging')}</span>
+                                                        <span className="text-xs text-gray-500">({t('acmeStagingHint')})</span>
+                                                    </label>
+                                                )}
 
                                                 <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                                                     <p className="text-xs text-blue-400">{t('acmePort80')}</p>
@@ -4842,7 +4882,7 @@
 
                                                 <button
                                                     onClick={handleAcmeRequest}
-                                                    disabled={acmeLoading || !serverSettings.domain || !serverSettings.acme_email}
+                                                    disabled={acmeLoading || !serverSettings.domain || (serverSettings.acme_provider === 'letsencrypt' && !serverSettings.acme_email) || (serverSettings.acme_provider === 'custom' && !serverSettings.acme_directory_url)}
                                                     className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
                                                 >
                                                     {acmeLoading ? t('acmeRequesting') : t('acmeRequest')}
@@ -5116,6 +5156,22 @@
                                                         <div className="flex items-center gap-2">
                                                             <div className={`toggle-switch ${plugin.enabled ? 'active' : ''}`} onClick={() => togglePlugin(plugin.id, plugin.enabled)} />
                                                             <button onClick={async () => {
+                                                                try {
+                                                                    const r = await fetch(`${API_URL}/plugins/${plugin.id}/config`, { credentials: 'include', headers: getAuthHeaders() });
+                                                                    if (r && r.ok) {
+                                                                        const d = await r.json();
+                                                                        let cfgText = d.config || '{}';
+                                                                        try { cfgText = JSON.stringify(JSON.parse(cfgText), null, 4); } catch(e) {}
+                                                                        setEditingPluginConfig({ id: plugin.id, name: plugin.name, config: cfgText });
+                                                                    } else {
+                                                                        const e = await r.json().catch(() => ({}));
+                                                                        addToast(e.error || 'No config found', 'info');
+                                                                    }
+                                                                } catch (e) { addToast('Error loading config', 'error'); }
+                                                            }} className="text-gray-400/50 hover:text-proxmox-orange transition-colors" title="Edit config.json">
+                                                                <Icons.Edit className="w-4 h-4" />
+                                                            </button>
+                                                            <button onClick={async () => {
                                                                 if (!confirm(`Delete plugin "${plugin.name}"? This removes all plugin files.`)) return;
                                                                 try {
                                                                     const r = await fetch(`${API_URL}/plugins/${plugin.id}`, { method: 'DELETE', credentials: 'include', headers: getAuthHeaders() });
@@ -5131,6 +5187,69 @@
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Plugin Config Editor — uses high z-index to overlay everything */}
+                                    {editingPluginConfig && (
+                                        <div style={{position:'fixed',inset:0,zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',padding:'24px',background:'rgba(0,0,0,0.85)'}} onClick={() => setEditingPluginConfig(null)}>
+                                            <div className="w-full max-w-4xl bg-proxmox-card border border-proxmox-border rounded-xl overflow-hidden shadow-2xl" style={{maxHeight: '90vh', display: 'flex', flexDirection: 'column'}} onClick={e => e.stopPropagation()}>
+                                                <div className="flex items-center justify-between p-4 border-b border-proxmox-border flex-shrink-0">
+                                                    <div>
+                                                        <h3 className="text-white font-semibold text-base">{editingPluginConfig.name} — config.json</h3>
+                                                        <p className="text-xs text-gray-500 mt-0.5">Edit plugin configuration (JSON)</p>
+                                                    </div>
+                                                    <button onClick={() => setEditingPluginConfig(null)} className="p-2 hover:bg-proxmox-border rounded"><Icons.X /></button>
+                                                </div>
+                                                <div className="p-4 flex-1 overflow-hidden">
+                                                    <textarea
+                                                        value={editingPluginConfig.config}
+                                                        onChange={e => setEditingPluginConfig({...editingPluginConfig, config: e.target.value})}
+                                                        className="w-full h-full px-4 py-3 bg-proxmox-darker border border-proxmox-border rounded-lg text-white text-sm focus:outline-none focus:border-proxmox-orange resize-none"
+                                                        spellCheck="false"
+                                                        style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', tabSize: 4, minHeight: '50vh' }}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between p-4 border-t border-proxmox-border flex-shrink-0">
+                                                    <button onClick={() => {
+                                                        try {
+                                                            const formatted = JSON.stringify(JSON.parse(editingPluginConfig.config), null, 4);
+                                                            setEditingPluginConfig({...editingPluginConfig, config: formatted});
+                                                        } catch (e) { addToast('Invalid JSON — cannot format', 'error'); }
+                                                    }} className="px-3 py-1.5 text-xs bg-proxmox-border hover:bg-gray-600 rounded-lg transition-colors">
+                                                        Format JSON
+                                                    </button>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => setEditingPluginConfig(null)} className="px-4 py-2 bg-proxmox-border hover:bg-gray-600 rounded-lg text-sm transition-colors">
+                                                            {t('cancel')}
+                                                        </button>
+                                                        <button onClick={async () => {
+                                                            try {
+                                                                JSON.parse(editingPluginConfig.config);
+                                                            } catch (e) {
+                                                                addToast('Invalid JSON: ' + e.message, 'error');
+                                                                return;
+                                                            }
+                                                            try {
+                                                                const r = await fetch(`${API_URL}/plugins/${editingPluginConfig.id}/config`, {
+                                                                    method: 'PUT', credentials: 'include',
+                                                                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                                                    body: JSON.stringify({ config: editingPluginConfig.config })
+                                                                });
+                                                                if (r && r.ok) {
+                                                                    addToast('Config saved. Restart plugin to apply changes.', 'success');
+                                                                    setEditingPluginConfig(null);
+                                                                } else {
+                                                                    const e = await r.json().catch(() => ({}));
+                                                                    addToast(e.error || 'Save failed', 'error');
+                                                                }
+                                                            } catch (e) { addToast('Error saving config', 'error'); }
+                                                        }} className="px-4 py-2 bg-proxmox-orange hover:bg-orange-600 rounded-lg text-sm font-medium transition-colors">
+                                                            {t('saveSettings')}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Save Button */}
                                     <div className="flex justify-end gap-3">

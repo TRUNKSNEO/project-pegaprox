@@ -120,12 +120,27 @@ def _set_plugin_state(plugin_id, enabled, error=''):
 # ---- Loading ----
 
 def load_plugin(app, plugin_id):
-    """Load a plugin module and call its register() function"""
+    """Load a plugin module and call its register() function
+    WARNING: Plugins execute arbitrary Python with full process privileges.
+    Only load plugins from trusted sources. There is no sandbox."""
     plugin_dir = Path(PLUGINS_DIR) / plugin_id
     init_file = plugin_dir / '__init__.py'
 
     if not init_file.exists():
         return False, 'No __init__.py found'
+
+    # NS: check manifest for trusted flag — warn if missing
+    manifest_path = plugin_dir / 'manifest.json'
+    is_trusted = False
+    if manifest_path.exists():
+        try:
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            is_trusted = manifest.get('author', '').startswith('PegaProx')
+        except Exception:
+            pass
+    if not is_trusted:
+        logging.warning(f"[PLUGINS] [SECURITY] Loading UNTRUSTED plugin '{plugin_id}' — not authored by PegaProx Team. Review code before use!")
 
     try:
         mod_name = f'plugins.{plugin_id}'
@@ -215,6 +230,7 @@ def list_plugins():
             'error': state.get('error', '') or plugin.get('error', ''),
             'has_init': plugin.get('_has_init', False),
             'routes': routes,
+            'trusted': plugin.get('author', '').startswith('PegaProx'),
         })
 
     return jsonify(result)
@@ -297,3 +313,60 @@ def delete_plugin(plugin_id):
     log_audit(usr, 'plugins.deleted', f"Deleted plugin: {plugin_id}")
 
     return jsonify({'success': True, 'message': f'Plugin {plugin_id} deleted.'})
+
+
+def _safe_plugin_path(plugin_id, filename='config.json'):
+    """Validate plugin_id and return safe path — prevents path traversal"""
+    if '..' in plugin_id or '/' in plugin_id or '\\' in plugin_id:
+        return None
+    resolved = (Path(PLUGINS_DIR) / plugin_id / filename).resolve()
+    if not str(resolved).startswith(str(Path(PLUGINS_DIR).resolve())):
+        return None
+    return resolved
+
+
+@bp.route('/api/plugins/<plugin_id>/config', methods=['GET'])
+@require_auth(perms=['plugins.manage'])
+def get_plugin_config(plugin_id):
+    """Read plugin config.json as raw text"""
+    config_path = _safe_plugin_path(plugin_id)
+    if not config_path:
+        return jsonify({'error': 'Invalid plugin ID'}), 400
+    if not config_path.exists():
+        return jsonify({'error': 'No config.json found for this plugin'}), 404
+    try:
+        return jsonify({'config': config_path.read_text(encoding='utf-8')})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/api/plugins/<plugin_id>/config', methods=['PUT'])
+@require_auth(perms=['plugins.manage'])
+def save_plugin_config(plugin_id):
+    """Write plugin config.json — validates JSON before saving"""
+    config_path = _safe_plugin_path(plugin_id)
+    if not config_path:
+        return jsonify({'error': 'Invalid plugin ID'}), 400
+    if not config_path.parent.exists():
+        return jsonify({'error': 'Plugin not found'}), 404
+
+    data = request.get_json() or {}
+    raw = data.get('config', '')
+    if not raw:
+        return jsonify({'error': 'Empty config'}), 400
+
+    # validate JSON
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'Invalid JSON: {e}'}), 400
+
+    try:
+        config_path.write_text(raw, encoding='utf-8')
+    except Exception as e:
+        return jsonify({'error': f'Failed to write: {e}'}), 500
+
+    usr = getattr(request, 'session', {}).get('user', 'system')
+    log_audit(usr, 'plugins.config_saved', f"Updated config for plugin: {plugin_id}")
+
+    return jsonify({'success': True})

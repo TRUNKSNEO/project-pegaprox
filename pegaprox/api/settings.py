@@ -973,7 +973,18 @@ def update_server_settings():
                 settings['acme_email'] = str(data['acme_email']).strip()
             if 'acme_staging' in data:
                 settings['acme_staging'] = bool(data['acme_staging'])
-            
+            if 'acme_provider' in data:
+                provider = str(data['acme_provider'] or 'letsencrypt').strip()
+                settings['acme_provider'] = provider if provider in ('letsencrypt', 'custom') else 'letsencrypt'
+            if 'acme_directory_url' in data:
+                url = str(data['acme_directory_url'] or '').strip()
+                # only allow https for security (prevent SSRF to metadata endpoints)
+                if url and not url.startswith('https://'):
+                    return jsonify({'error': 'ACME directory URL must use HTTPS'}), 400
+                settings['acme_directory_url'] = url
+            if settings.get('acme_provider') != 'custom':
+                settings['acme_directory_url'] = ''
+
             # security/bruteforce settings
             if 'login_max_attempts' in data:
                 settings['login_max_attempts'] = max(1, min(50, int(data['login_max_attempts'])))
@@ -1262,6 +1273,15 @@ def update_server_settings():
             settings['reverse_proxy_enabled'] = reverse_proxy
             settings['trusted_proxies'] = trusted_proxies
             settings['proxy_bind_address'] = proxy_bind
+            # ACME settings from multipart form
+            settings['acme_enabled'] = request.form.get('acme_enabled', str(settings.get('acme_enabled', 'false'))).lower() == 'true'
+            settings['acme_email'] = request.form.get('acme_email', settings.get('acme_email', '')).strip()
+            settings['acme_staging'] = request.form.get('acme_staging', str(settings.get('acme_staging', 'false'))).lower() == 'true'
+            acme_provider = request.form.get('acme_provider', settings.get('acme_provider', 'letsencrypt')).strip()
+            settings['acme_provider'] = acme_provider if acme_provider in ('letsencrypt', 'custom') else 'letsencrypt'
+            settings['acme_directory_url'] = request.form.get('acme_directory_url', settings.get('acme_directory_url', '')).strip()
+            if settings['acme_provider'] != 'custom':
+                settings['acme_directory_url'] = ''
             # hot-reload trusted proxies
             from pegaprox.utils.audit import load_trusted_proxies
             load_trusted_proxies(trusted_proxies)
@@ -1323,6 +1343,10 @@ def update_server_settings():
                     ext = os.path.splitext(bg_file.filename)[1].lower()
                     if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.svg'):
                         return jsonify({'error': 'Invalid image format'}), 400
+                    # NS: validate magic bytes to prevent disguised executables
+                    _magic = {'.png': b'\x89PNG', '.jpg': b'\xff\xd8\xff', '.jpeg': b'\xff\xd8\xff', '.webp': b'RIFF'}
+                    if ext in _magic and not bg_content[:4].startswith(_magic[ext]):
+                        return jsonify({'error': 'File content does not match extension'}), 400
                     from pathlib import Path as _Path
                     bg_path = os.path.join(IMAGES_DIR, 'login_bg' + ext)
                     # remove old bg files first
@@ -1448,6 +1472,8 @@ def get_acme_status():
             'acme_enabled': settings.get('acme_enabled', False),
             'acme_email': settings.get('acme_email', ''),
             'acme_staging': settings.get('acme_staging', False),
+            'acme_provider': settings.get('acme_provider', 'letsencrypt'),
+            'acme_directory_url': settings.get('acme_directory_url', ''),
             'domain': settings.get('domain', ''),
             'cert': cert_info,
         })
@@ -1458,7 +1484,7 @@ def get_acme_status():
 @bp.route('/api/settings/acme/request', methods=['POST'])
 @require_auth(roles=[ROLE_ADMIN])
 def request_acme_certificate():
-    """Request a new Let's Encrypt certificate (admin only)"""
+    """Request a new ACME certificate — supports Let's Encrypt and custom CAs"""
     try:
         from pegaprox.core.acme import request_certificate
         from pathlib import Path
@@ -1474,23 +1500,36 @@ def request_acme_certificate():
         domain = data.get('domain') or settings.get('domain', '')
         email = data.get('email') or settings.get('acme_email', '')
         staging = data.get('staging', settings.get('acme_staging', False))
+        acme_provider = str(data.get('provider') or settings.get('acme_provider', 'letsencrypt')).strip() or 'letsencrypt'
+        directory_url = str(data.get('directory_url') or settings.get('acme_directory_url', '')).strip()
 
         if not domain:
             return jsonify({'error': 'Domain is required'}), 400
-        if not email:
+        if acme_provider not in ('letsencrypt', 'custom'):
+            return jsonify({'error': 'Invalid ACME provider'}), 400
+        if acme_provider == 'custom':
+            if not directory_url:
+                return jsonify({'error': 'Custom ACME directory URL is required'}), 400
+            if not directory_url.startswith('https://'):
+                return jsonify({'error': 'ACME directory URL must use HTTPS'}), 400
+        else:
+            directory_url = ''
+        if acme_provider == 'letsencrypt' and not email:
             return jsonify({'error': 'Email is required for Let\'s Encrypt'}), 400
 
         # persist ACME settings
         settings['acme_enabled'] = True
         settings['acme_email'] = email
         settings['acme_staging'] = bool(staging)
+        settings['acme_provider'] = acme_provider
+        settings['acme_directory_url'] = directory_url
         settings['domain'] = domain
         save_server_settings(settings)
 
         usr = getattr(request, 'session', {}).get('user', 'admin')
-        log_audit(usr, 'settings.acme_request', f"ACME certificate requested for {domain} ({'staging' if staging else 'production'})")
+        log_audit(usr, 'settings.acme_request', f"ACME certificate requested for {domain} via {acme_provider}")
 
-        result = request_certificate(domain, email, ssl_dir, staging=staging)
+        result = request_certificate(domain, email, ssl_dir, staging=staging, directory_url=directory_url)
 
         if result['success']:
             # enable SSL automatically
@@ -2628,6 +2667,30 @@ def index():
     """Serve the web interface"""
     return send_from_directory(WEB_DIR, 'index.html')
 
+
+@bp.route('/status')
+def status_page():
+    """Serve public status page (no auth — key is in URL)"""
+    import os
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'plugins', 'status_page', 'status.html')
+    if os.path.exists(path):
+        return send_file(path)
+    return '<h1>Status Page not installed</h1><p>Enable the Status Page plugin in Settings → Plugins</p>', 404
+
+@bp.route('/api/public/status-page', methods=['GET'])
+def public_status_api():
+    """NS: Apr 2026 — Public status endpoint, auth via URL key (no session).
+    Bypasses require_auth — key validated inside the plugin handler."""
+    try:
+        from plugins.status_page import _public_status
+        result = _public_status()
+        if isinstance(result, tuple):
+            return jsonify(result[0]), result[1]
+        return jsonify(result)
+    except ImportError:
+        return jsonify({'error': 'Status Page plugin not loaded'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/portal')
 @bp.route('/portal/<path:subpath>')

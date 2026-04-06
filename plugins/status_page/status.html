@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Status</title>
+    <style>
+        :root { --accent: #e57000; --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; --green: #3fb950; --red: #da3633; --blue: #58a6ff; --purple: #bc8cff; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+        .header h1 { font-size: 20px; font-weight: 700; }
+        .header-right { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+        .badge-ok { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; background: rgba(63,185,80,0.12); color: var(--green); }
+        .badge-down { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; background: rgba(218,54,51,0.12); color: var(--red); }
+        .badge-warn { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; background: rgba(229,112,0,0.12); color: var(--accent); }
+        .cluster { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+        .cluster-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+        .cluster-header h2 { font-size: 15px; font-weight: 600; }
+        .cluster-body { padding: 16px 18px; }
+        .nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .node-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+        .node-card.offline { opacity: 0.5; border-color: var(--red); }
+        .node-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dot-green { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,0.4); }
+        .dot-red { background: var(--red); box-shadow: 0 0 6px rgba(218,54,51,0.4); }
+        .bar-row { margin-bottom: 6px; }
+        .bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+        .bar { height: 5px; background: #21262d; border-radius: 3px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+        .summary-row { display: flex; gap: 24px; flex-wrap: wrap; padding: 12px 0; }
+        .summary-item { text-align: center; }
+        .summary-value { font-size: 24px; font-weight: 700; line-height: 1.2; }
+        .summary-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .storage-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+        .storage-item { display: flex; align-items: center; gap: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+        .storage-info { flex: 1; min-width: 0; }
+        .storage-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .storage-type { font-size: 10px; color: var(--muted); }
+        .section-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .section + .section { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; }
+        .error-box { text-align: center; padding: 60px 20px; color: var(--red); }
+        .loading { text-align: center; padding: 80px 20px; color: var(--muted); }
+        .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .footer { text-align: center; padding: 16px; font-size: 11px; color: #484f58; border-top: 1px solid var(--border); margin-top: 24px; }
+        .footer a { color: var(--accent); text-decoration: none; }
+        .overall-status { text-align: center; margin-bottom: 24px; }
+        .overall-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+        .overall-ok { background: rgba(63,185,80,0.1); color: var(--green); border: 1px solid rgba(63,185,80,0.2); }
+        .overall-partial { background: rgba(229,112,0,0.1); color: var(--accent); border: 1px solid rgba(229,112,0,0.2); }
+        .overall-down { background: rgba(218,54,51,0.1); color: var(--red); border: 1px solid rgba(218,54,51,0.2); }
+        .refresh-indicator { font-size: 11px; color: var(--muted); }
+    </style>
+</head>
+<body>
+
+<div class="container" id="app">
+    <div class="loading"><div class="spinner"></div>Loading status...</div>
+</div>
+
+<div class="footer">
+    <img src="/images/pegaprox.png" alt="PegaProx" style="height:13px;display:inline;vertical-align:middle;margin-right:4px">
+    Powered by <a href="https://pegaprox.com" target="_blank">PegaProx</a> ·
+    <a href="https://github.com/PegaProx/project-pegaprox" target="_blank">Open Source</a> · AGPL-3.0
+</div>
+
+<script>
+(function(){
+'use strict';
+const params = new URLSearchParams(window.location.search);
+const KEY = params.get('key') || '';
+const API = `${window.location.origin}/api/public/status-page?key=${encodeURIComponent(KEY)}`;
+let refreshMs = 30000;
+
+function fmtBytes(b) {
+    if (!b) return '0 B';
+    if (b >= 1099511627776) return (b / 1099511627776).toFixed(1) + ' TB';
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB';
+    if (b >= 1048576) return (b / 1048576).toFixed(0) + ' MB';
+    return (b / 1024).toFixed(0) + ' KB';
+}
+
+function fmtUptime(s) {
+    if (!s) return '-';
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+    if (d > 0) return d + 'd ' + h + 'h';
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+}
+
+function barColor(pct, type) {
+    if (pct > 90) return 'var(--red)';
+    if (pct > 75) return 'var(--accent)';
+    if (type === 'cpu') return 'var(--green)';
+    if (type === 'mem') return 'var(--blue)';
+    return 'var(--purple)';
+}
+
+async function load() {
+    try {
+        const r = await fetch(API);
+        if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            document.getElementById('app').innerHTML = `<div class="error-box"><h2 style="margin-bottom:8px">${r.status === 401 ? 'Unauthorized' : 'Error'}</h2><p style="color:var(--muted)">${d.error || 'Failed to load status'}</p></div>`;
+            return;
+        }
+        const data = await r.json();
+        render(data);
+        refreshMs = (data.config?.refresh_interval || 30) * 1000;
+    } catch (e) {
+        document.getElementById('app').innerHTML = '<div class="error-box"><h2>Connection Error</h2><p style="color:var(--muted)">Could not reach the server.</p></div>';
+    }
+}
+
+function render(data) {
+    const cfg = data.config || {};
+    const clusters = data.clusters || [];
+    if (cfg.theme_color) document.documentElement.style.setProperty('--accent', cfg.theme_color);
+    document.title = cfg.page_title || 'System Status';
+
+    // overall status
+    const allOnline = clusters.every(c => c.status === 'online');
+    const allOffline = clusters.every(c => c.status === 'offline');
+    const anyDown = clusters.some(c => c.status === 'offline') || clusters.some(c => (c.nodes || []).some(n => !n.online));
+    let overallClass = 'overall-ok', overallText = 'All Systems Operational', overallDot = '&#x25CF;';
+    if (allOffline) { overallClass = 'overall-down'; overallText = 'All Systems Down'; }
+    else if (anyDown) { overallClass = 'overall-partial'; overallText = 'Partial Outage'; }
+
+    let html = `<div class="header">
+        <div style="display:flex;align-items:center;gap:12px">
+            ${cfg.custom_logo_url ? `<img src="${cfg.custom_logo_url}" alt="" style="height:28px">` : ''}
+            <h1>${cfg.page_title || 'System Status'}</h1>
+        </div>
+        <div class="header-right">
+            <span class="refresh-indicator" id="countdown"></span>
+        </div>
+    </div>
+    <div class="overall-status">
+        <span class="overall-badge ${overallClass}">${overallDot} ${overallText}</span>
+    </div>`;
+
+    for (const c of clusters) {
+        const online = c.status === 'online';
+        const nodesUp = (c.nodes || []).filter(n => n.online).length;
+        const nodesTotal = (c.nodes || []).length;
+        const clusterBadge = !online ? '<span class="badge-down">&#x25CF; Offline</span>'
+            : nodesUp === nodesTotal ? '<span class="badge-ok">&#x25CF; Online</span>'
+            : `<span class="badge-warn">&#x25CF; ${nodesUp}/${nodesTotal} Nodes</span>`;
+
+        html += `<div class="cluster">
+            <div class="cluster-header">
+                <h2>${c.name}</h2>
+                ${clusterBadge}
+            </div>`;
+
+        if (!online) {
+            html += `<div class="cluster-body" style="text-align:center;padding:24px;color:var(--red)">Cluster unreachable</div></div>`;
+            continue;
+        }
+
+        html += '<div class="cluster-body">';
+
+        // nodes
+        if (cfg.show_node_details && c.nodes && c.nodes.length) {
+            html += '<div class="section"><div class="section-title">Nodes</div><div class="nodes-grid">';
+            for (const n of c.nodes) {
+                const dotClass = n.online ? 'dot-green' : 'dot-red';
+                html += `<div class="node-card ${n.online ? '' : 'offline'}">
+                    <div class="node-name"><span class="dot ${dotClass}"></span>${n.name}</div>
+                    ${n.online ? `
+                    <div class="bar-row"><div class="bar-label"><span>CPU</span><span>${n.cpu_percent}%</span></div><div class="bar"><div class="bar-fill" style="width:${n.cpu_percent}%;background:${barColor(n.cpu_percent,'cpu')}"></div></div></div>
+                    <div class="bar-row"><div class="bar-label"><span>RAM</span><span>${n.mem_percent}%</span></div><div class="bar"><div class="bar-fill" style="width:${n.mem_percent}%;background:${barColor(n.mem_percent,'mem')}"></div></div></div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:6px">Uptime: ${fmtUptime(n.uptime)}</div>
+                    ` : '<div style="font-size:12px;color:var(--red);margin-top:4px">Offline</div>'}
+                </div>`;
+            }
+            html += '</div></div>';
+        }
+
+        // VM summary
+        if (cfg.show_vm_summary && c.vm_summary && c.vm_summary.total > 0) {
+            const vm = c.vm_summary;
+            html += `<div class="section"><div class="section-title">Virtual Machines</div><div class="summary-row">
+                <div class="summary-item"><div class="summary-value" style="color:var(--text)">${vm.total}</div><div class="summary-label">Total</div></div>
+                <div class="summary-item"><div class="summary-value" style="color:var(--green)">${vm.running}</div><div class="summary-label">Running</div></div>
+                <div class="summary-item"><div class="summary-value" style="color:var(--muted)">${vm.stopped}</div><div class="summary-label">Stopped</div></div>
+                <div class="summary-item"><div class="summary-value" style="color:var(--blue)">${vm.qemu}</div><div class="summary-label">VMs</div></div>
+                <div class="summary-item"><div class="summary-value" style="color:var(--purple)">${vm.lxc}</div><div class="summary-label">Containers</div></div>
+            </div></div>`;
+        }
+
+        // storage
+        if (cfg.show_storage && c.storage && c.storage.length) {
+            html += '<div class="section"><div class="section-title">Storage</div><div class="storage-list">';
+            for (const s of c.storage) {
+                html += `<div class="storage-item">
+                    <div class="storage-info">
+                        <div class="storage-name">${s.name}</div>
+                        <div class="storage-type">${s.type} &middot; ${fmtBytes(s.used)} / ${fmtBytes(s.total)}</div>
+                    </div>
+                    <div style="width:80px">
+                        <div style="text-align:right;font-size:12px;font-weight:600;color:${barColor(s.percent,'storage')};margin-bottom:2px">${s.percent}%</div>
+                        <div class="bar"><div class="bar-fill" style="width:${s.percent}%;background:${barColor(s.percent,'storage')}"></div></div>
+                    </div>
+                </div>`;
+            }
+            html += '</div></div>';
+        }
+
+        html += '</div></div>';
+    }
+
+    document.getElementById('app').innerHTML = html;
+    startCountdown();
+}
+
+let countdownTimer = null;
+function startCountdown() {
+    let remaining = Math.floor(refreshMs / 1000);
+    const el = document.getElementById('countdown');
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+        remaining--;
+        if (el) el.textContent = `Refresh in ${remaining}s`;
+        if (remaining <= 0) {
+            clearInterval(countdownTimer);
+            load();
+        }
+    }, 1000);
+}
+
+if (!KEY) {
+    document.getElementById('app').innerHTML = '<div class="error-box"><h2>Missing Auth Key</h2><p style="color:var(--muted)">Add <code>?key=your_auth_key</code> to the URL.</p></div>';
+} else {
+    load();
+}
+})();
+</script>
+</body>
+</html>

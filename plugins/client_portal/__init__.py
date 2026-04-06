@@ -387,6 +387,55 @@ def _vm_snapshot_rollback():
         return {'error': str(e)}
 
 
+def _vm_snapshot_delete():
+    """Delete a snapshot"""
+    username = request.session.get('user', '')
+    users = load_users()
+    user = users.get(username, {})
+    user['username'] = username
+    cfg = _load_config()
+
+    if not cfg.get('allow_snapshots', False):
+        return {'error': 'Snapshots not allowed'}
+
+    data = request.get_json() or {}
+    cluster_id = data.get('cluster_id')
+    vmid = data.get('vmid')
+    snapname = data.get('snapname')
+
+    if not cluster_id or not vmid or not snapname:
+        return {'error': 'Missing cluster_id, vmid, or snapname'}
+
+    if not user_can_access_vm(user, cluster_id, int(vmid), 'vm.snapshot'):
+        return {'error': 'Permission denied'}
+
+    if cluster_id not in cluster_managers:
+        return {'error': 'Cluster not found'}
+
+    mgr = cluster_managers[cluster_id]
+    host = mgr.host
+
+    try:
+        resources = mgr.get_vm_resources()
+        vm = next((r for r in resources if r.get('vmid') == int(vmid)), None)
+        if not vm:
+            return {'error': 'VM not found'}
+
+        node = vm.get('node')
+        vm_type = vm.get('type', 'qemu')
+
+        resp = mgr._api_delete(
+            f"https://{host}:8006/api2/json/nodes/{node}/{vm_type}/{vmid}/snapshot/{snapname}"
+        )
+        if resp.status_code == 200:
+            from pegaprox.utils.audit import log_audit
+            log_audit(username, 'portal.snapshot_deleted', f'Deleted snapshot "{snapname}" on VM {vmid}')
+            return {'success': True, 'snapname': snapname}
+        return {'error': f'Delete failed: {resp.text[:100]}'}
+    except Exception as e:
+        return {'error': str(e)}
+
+
 def _change_password():
     """Change authenticated user's password"""
     cfg = _load_config()
@@ -433,6 +482,7 @@ def register(app):
     register_plugin_route('client_portal', 'vm/console', _vm_console)
     register_plugin_route('client_portal', 'vm/snapshots', _vm_snapshots)
     register_plugin_route('client_portal', 'vm/snapshot-rollback', _vm_snapshot_rollback)
+    register_plugin_route('client_portal', 'vm/snapshot-delete', _vm_snapshot_delete)
     register_plugin_route('client_portal', 'account/change-password', _change_password)
 
     logging.info("[PLUGINS] Client Portal plugin registered")

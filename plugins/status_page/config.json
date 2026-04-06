@@ -1,0 +1,11 @@
+{
+    "auth_key": "97c43bdd889e4f1383aac121",
+    "page_title": "System Status",
+    "refresh_interval": 30,
+    "show_node_details": true,
+    "show_vm_summary": true,
+    "show_storage": true,
+    "show_cluster_name": true,
+    "theme_color": "#e57000",
+    "custom_logo_url": ""
+}

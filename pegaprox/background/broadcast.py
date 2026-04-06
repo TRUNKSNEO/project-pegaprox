@@ -25,6 +25,7 @@ _AUDIT_ACTION_MAP = {
     'portal.vm.reboot': 'portalreboot',
     'portal.snapshot_created': 'portalsnapshot',
     'portal.snapshot_rollback': 'portalrollback',
+    'portal.snapshot_deleted': 'portalsnapshotdel',
     'portal.password_changed': 'portalpassword',
 }
 

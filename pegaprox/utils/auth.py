@@ -449,6 +449,10 @@ def validate_session(session_id: str) -> dict:
         if time.time() - session['last_activity'] > timeout:
             del active_sessions[session_id]
             expired = True
+        # NS: absolute session timeout — 24h max regardless of activity (security hardening)
+        elif time.time() - session.get('created_at', session.get('last_activity', time.time())) > 86400:
+            del active_sessions[session_id]
+            expired = True
         else:
             # Update last activity
             session['last_activity'] = time.time()
@@ -524,11 +528,15 @@ def create_api_token(username: str, token_name: str, role: str = None,
         role = user.get('role', ROLE_VIEWER)
     
     # NS: Don't allow creating tokens with higher privileges than the user
+    # MK: custom roles default to level 2 (user) not 1 (viewer) — prevents escalation
     role_hierarchy = {ROLE_ADMIN: 3, ROLE_USER: 2, ROLE_VIEWER: 1}
-    user_level = role_hierarchy.get(user.get('role', ROLE_VIEWER), 1)
-    token_level = role_hierarchy.get(role, 1)
+    user_level = role_hierarchy.get(user.get('role', ROLE_VIEWER), 2 if user.get('role') not in role_hierarchy else 1)
+    token_level = role_hierarchy.get(role, 2 if role not in role_hierarchy else 1)
     if token_level > user_level:
         return {'error': 'Cannot create token with higher privileges than your own role'}
+    # non-admins can't create admin tokens at all
+    if role == ROLE_ADMIN and user.get('role') != ROLE_ADMIN:
+        return {'error': 'Only admins can create admin tokens'}
     
     token, token_hash, prefix = generate_api_token()
     

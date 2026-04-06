@@ -537,7 +537,9 @@ class PegaProxManager:
             hosts_to_try = [self.config.host] + (self.config.fallback_hosts or [])
             
             self._ssl_verify = self.config.ssl_verification
-            # self._ssl_verify = False  # tmp disable for debugging cert issues
+            if not self._ssl_verify and not getattr(self, '_ssl_warn_shown', False):
+                self.logger.warning(f"[SECURITY] SSL verification disabled for cluster '{self.config.name}' — vulnerable to MITM")
+                self._ssl_warn_shown = True
             
             # NS: Check if using API Token (format: user@realm!tokenid)
             # API tokens have ! in the username, passwords don't
