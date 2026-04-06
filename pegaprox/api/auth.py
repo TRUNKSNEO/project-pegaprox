@@ -614,9 +614,11 @@ def auth_login():
             'language': user.get('language', ''),
             'ui_layout': user.get('ui_layout', 'modern'),
             'taskbar_auto_expand': user.get('taskbar_auto_expand', True),  # NS: Feb 2026
-            'layout_chosen': user.get('layout_chosen', False)
+            'layout_chosen': user.get('layout_chosen', False),
+            'portal_only': user.get('portal_only', False)
         },
         'session_id': session_id,
+        'portal_only': user.get('portal_only', False),
         'default_theme': default_theme,  # NS: Include for frontend fallback
         'reverse_proxy_enabled': settings.get('reverse_proxy_enabled', False),
         'requires_2fa_setup': requires_2fa_setup,  # NS: Feb 2026 - Force 2FA
@@ -781,7 +783,8 @@ def auth_check():
             'ui_layout': user.get('ui_layout', 'modern'),
             'taskbar_auto_expand': user.get('taskbar_auto_expand', True),  # NS: Feb 2026
             'totp_enabled': user.get('totp_enabled', False),
-            'layout_chosen': user.get('layout_chosen', False)
+            'layout_chosen': user.get('layout_chosen', False),
+            'portal_only': user.get('portal_only', False)
         },
         'password_expiry': password_expiry,
         'requires_2fa_setup': requires_2fa_setup,

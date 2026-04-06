@@ -224,6 +224,11 @@
                     }
                     
                     if (resp.ok && data.success) {
+                        // portal_only users can't use main dashboard
+                        if (data.portal_only && !window.location.pathname.startsWith('/portal')) {
+                            setError('This account can only log in via the Client Portal (/portal)');
+                            return { success: false, portal_only: true };
+                        }
                         setUser(data.user);
                         setIsAuthenticated(true);
                         // NS: Keep session_id in memory for WebSocket auth

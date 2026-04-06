@@ -11,7 +11,7 @@ import logging
 import threading
 import re
 from datetime import datetime
-from flask import Blueprint, jsonify, request, Response, make_response, send_from_directory
+from flask import Blueprint, jsonify, request, Response, make_response, send_from_directory, send_file
 
 from pegaprox.constants import *
 from pegaprox.globals import *
@@ -2624,10 +2624,21 @@ def add_cors_origin():
 
 # API Routes
 @bp.route('/')
-
 def index():
     """Serve the web interface"""
     return send_from_directory(WEB_DIR, 'index.html')
+
+
+@bp.route('/portal')
+@bp.route('/portal/<path:subpath>')
+def client_portal_page(subpath=None):
+    """Serve client portal plugin frontend"""
+    import os
+    portal_path = os.path.join(os.path.dirname(__file__), '..', '..', 'plugins', 'client_portal', 'portal.html')
+    if os.path.exists(portal_path):
+        return send_file(portal_path)
+    return '<h1>Client Portal not installed</h1><p>Enable the Client Portal plugin in Settings → Plugins</p>', 404
+
 
 @bp.route('/oidc/callback')
 def oidc_callback_page():

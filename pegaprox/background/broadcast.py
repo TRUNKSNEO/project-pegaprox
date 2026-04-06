@@ -17,6 +17,63 @@ from pegaprox.globals import (
 )
 from pegaprox.utils.realtime import broadcast_sse
 
+# NS: map portal audit actions to task-like type strings
+_AUDIT_ACTION_MAP = {
+    'portal.vm.start': 'portalstart',
+    'portal.vm.stop': 'portalstop',
+    'portal.vm.shutdown': 'portalshutdown',
+    'portal.vm.reboot': 'portalreboot',
+    'portal.snapshot_created': 'portalsnapshot',
+    'portal.snapshot_rollback': 'portalrollback',
+    'portal.password_changed': 'portalpassword',
+}
+
+def _get_recent_audit_tasks(cluster_id, cluster_name):
+    """Convert recent audit log entries into task-like objects for the task bar"""
+    try:
+        from pegaprox.core.db import get_db
+        db = get_db()
+        cursor = db.conn.cursor()
+        # only last 2 minutes of portal + console events
+        cutoff = (datetime.now() - __import__('datetime').timedelta(minutes=2)).isoformat()
+        cursor.execute('''
+            SELECT id, timestamp, user, action, details FROM audit_log
+            WHERE action LIKE 'portal.%'
+            AND timestamp > ?
+            ORDER BY timestamp DESC LIMIT 10
+        ''', (cutoff,))
+        rows = cursor.fetchall()
+        if not rows:
+            return []
+        results = []
+        for row in rows:
+            aid, ts, user, action, details = row
+            task_type = _AUDIT_ACTION_MAP.get(action, action)
+            # extract vmid from details if present
+            vmid = ''
+            import re
+            m = re.search(r'VM (\d+)', details or '')
+            if m:
+                vmid = m.group(1)
+            results.append({
+                'upid': f'audit-{aid}',
+                'node': '',
+                'type': task_type,
+                'status': 'stopped',  # completed
+                'starttime': int(datetime.fromisoformat(ts).timestamp()) if ts else 0,
+                'endtime': int(datetime.fromisoformat(ts).timestamp()) if ts else 0,
+                'user': '',
+                'pegaprox_user': user,
+                'id': vmid,
+                'vmid': int(vmid) if vmid else 0,
+                'exitstatus': 'OK',
+                'cluster_id': cluster_id,
+                '_portal': True,  # marker so frontend can style differently
+            })
+        return results
+    except Exception:
+        return []
+
 def broadcast_resources_loop():
     """Periodically broadcast resource updates to all connected SSE clients
     
@@ -90,6 +147,16 @@ def broadcast_resources_loop():
                     # Get tasks every loop - but only broadcast if changed
                     tasks = mgr.get_tasks(limit=50)
                     task_list = tasks or []
+
+                    # NS: Apr 2026 - Inject recent portal/audit actions as virtual tasks
+                    # so admins can see what customers are doing in their task bar
+                    try:
+                        audit_tasks = _get_recent_audit_tasks(cid, mgr.config.name)
+                        if audit_tasks:
+                            task_list = task_list + audit_tasks
+                    except Exception:
+                        pass
+
                     # Deduplicate: only broadcast if tasks actually changed
                     task_hash = hash(tuple((t.get('upid',''), t.get('status','')) for t in task_list[:20]))
                     prev_hash = getattr(mgr, '_last_task_hash', None)

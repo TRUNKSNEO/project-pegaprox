@@ -3168,6 +3168,9 @@ def get_console_ticket(cluster_id, node, vm_type, vmid):
     result = mgr.get_vnc_ticket(node, vmid, vm_type)
 
     if result.get('success'):
+        # NS: log who opened the console
+        usr = request.session.get('user', 'unknown')
+        log_audit(usr, 'vm.console', f'VNC console opened: {vm_type}/{vmid} on {node}', cluster=mgr.config.name)
         return jsonify(result)
     return jsonify({'error': result.get('error', 'Failed')}), 500
 

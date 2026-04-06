@@ -1267,6 +1267,14 @@ class PegaProxDB:
         except Exception as e:
             logging.error(f"Error creating backup_verifications table: {e}")
 
+        # NS: Apr 2026 - portal_only column for client portal
+        try:
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(users)").fetchall()]
+            if 'portal_only' not in cols:
+                cursor.execute("ALTER TABLE users ADD COLUMN portal_only INTEGER DEFAULT 0")
+                logging.info("Added portal_only column to users table")
+        except: pass
+
         conn.commit()
         logging.info("DB schema initialized")
     
@@ -2449,6 +2457,7 @@ class PegaProxDB:
                 'oidc_sub': row_dict.get('oidc_sub', ''),
                 'last_oidc_sync': row_dict.get('last_oidc_sync', ''),
                 'layout_chosen': bool(row_dict.get('layout_chosen', 0)),
+                'portal_only': bool(row_dict.get('portal_only', 0)),
             }
 
         return users
@@ -2512,8 +2521,9 @@ class PegaProxDB:
             'oidc_sub': row_dict.get('oidc_sub', ''),
             'last_oidc_sync': row_dict.get('last_oidc_sync', ''),
             'layout_chosen': bool(row_dict.get('layout_chosen', 0)),
+            'portal_only': bool(row_dict.get('portal_only', 0)),
         }
-    
+
     def save_user(self, username: str, data: dict):
         """Save or update user"""
         cursor = self.conn.cursor()
@@ -2527,13 +2537,13 @@ class PegaProxDB:
             enabled, theme, language, ui_layout, taskbar_auto_expand,
              auth_source, display_name, email, avatar_mime, avatar_data, ldap_dn, last_ldap_sync,
              tenant_permissions, denied_permissions, oidc_sub, last_oidc_sync,
-             layout_chosen)
+             layout_chosen, portal_only)
             VALUES (?, ?, ?, ?, ?, ?,
                     COALESCE((SELECT created_at FROM users WHERE username = ?), ?),
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
-                    ?)
+                    ?, ?)
         ''', (
             username,
             data.get('password_salt', ''),
@@ -2566,6 +2576,7 @@ class PegaProxDB:
             data.get('oidc_sub', ''),
             data.get('last_oidc_sync', ''),
             1 if data.get('layout_chosen', False) else 0,
+            1 if data.get('portal_only', False) else 0,
         ))
         self.conn.commit()
     

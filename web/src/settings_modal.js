@@ -185,7 +185,8 @@
                 display_name: '',
                 email: '',
                 role: 'user',
-                tenant_id: 'default'
+                tenant_id: 'default',
+                portal_only: false
             });
             
             useEffect(() => {
@@ -1489,7 +1490,7 @@
                     if (response && response.ok) {
                         addToast(t('userCreated'), 'success');
                         setShowAddUser(false);
-                        setNewUser({ username: '', password: '', display_name: '', email: '', role: 'user', tenant_id: 'default' });
+                        setNewUser({ username: '', password: '', display_name: '', email: '', role: 'user', tenant_id: 'default', portal_only: false });
                         fetchUsers();
                         fetchAuditLogs();
                         fetchTenants(); // LW: refresh tenant user counts
@@ -1955,6 +1956,18 @@
                                                     </select>
                                                     <p className="text-xs text-gray-500 mt-1">{t('tenantAutoHint') || 'Auto-set when using tenant role'}</p>
                                                 </div>
+                                                <div className="flex items-center gap-3 pt-5">
+                                                    <label className="flex items-center gap-3 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={newUser.portal_only || false}
+                                                            onChange={e => setNewUser({...newUser, portal_only: e.target.checked})}
+                                                            className="w-4 h-4 rounded border-proxmox-border bg-proxmox-darker text-proxmox-orange focus:ring-proxmox-orange"
+                                                        />
+                                                        <span className="text-sm text-gray-300">{t('portalOnly') || 'Portal Only'}</span>
+                                                    </label>
+                                                    <p className="text-xs text-gray-500">{t('portalOnlyHint') || 'User can only log in via /portal'}</p>
+                                                </div>
                                                 <div className="flex items-end gap-2">
                                                     <button
                                                         type="submit"
@@ -1987,6 +2000,7 @@
                                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">2FA</th>
                                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('lastLogin')}</th>
                                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('status')}</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('portal') || 'Portal'}</th>
                                                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">{t('actions')}</th>
                                                 </tr>
                                             </thead>
@@ -2088,6 +2102,24 @@
                                                             }`}>
                                                                 {user.enabled ? t('enabled') : t('disabled')}
                                                             </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            {editingUser === user.username ? (
+                                                                <button
+                                                                    onClick={() => handleUpdateUser(user.username, { portal_only: !user.portal_only })}
+                                                                    className={`px-2 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
+                                                                        user.portal_only ? 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'bg-gray-500/10 text-gray-500 hover:bg-gray-500/20'
+                                                                    }`}
+                                                                >
+                                                                    {user.portal_only ? (t('portalOnly') || 'Portal') : '-'}
+                                                                </button>
+                                                            ) : (
+                                                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                                    user.portal_only ? 'bg-orange-500/10 text-orange-400' : 'text-gray-500'
+                                                                }`}>
+                                                                    {user.portal_only ? (t('portalOnly') || 'Portal') : '-'}
+                                                                </span>
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
                                                             <div className="flex items-center justify-end gap-1">

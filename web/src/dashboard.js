@@ -96,6 +96,12 @@
                     'imgcopy': 'Disk Copy', 'move_volume': 'Disk Move',
                     'resize': 'Disk Resize', 'download': 'Download',
                     'vzdump': 'Backup', 'qmrestore': 'Restore', 'vzrestore': 'Restore',
+                    'vncproxy': 'VNC Console',
+                    // portal actions
+                    'portalstart': 'Portal: Start',
+                    'portalstop': 'Portal: Stop', 'portalshutdown': 'Portal: Shutdown',
+                    'portalreboot': 'Portal: Reboot', 'portalsnapshot': 'Portal: Snapshot',
+                    'portalrollback': 'Portal: Rollback', 'portalpassword': 'Portal: Password',
                 };
                 return types[type] || type;
             };

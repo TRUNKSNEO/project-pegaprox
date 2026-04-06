@@ -5831,7 +5831,28 @@ echo "AGENT_INSTALLED_OK"
                     pegaprox_user = get_task_user(task_info['upid'])
                     if pegaprox_user:
                         task_info['pegaprox_user'] = pegaprox_user
-                    
+
+                    # NS: Apr 2026 - match vncproxy tasks with audit log to find who opened the console
+                    if not pegaprox_user and task_info['type'] == 'vncproxy' and task_info.get('id'):
+                        try:
+                            from pegaprox.core.db import get_db
+                            _db = get_db()
+                            _c = _db.conn.cursor()
+                            # match by /vmid in details (format: "VNC console opened: qemu/100 on node")
+                            # use task starttime for time window since sqlite datetime() is UTC
+                            _cutoff = (datetime.now() - timedelta(seconds=120)).isoformat()
+                            _c.execute(
+                                "SELECT user FROM audit_log WHERE action = 'vm.console' "
+                                "AND (details LIKE ? OR details LIKE ?) "
+                                "AND timestamp > ? ORDER BY timestamp DESC LIMIT 1",
+                                (f"%/{task_info['id']} %", f"%VM {task_info['id']}%", _cutoff)
+                            )
+                            _row = _c.fetchone()
+                            if _row:
+                                task_info['pegaprox_user'] = _row[0]
+                        except Exception:
+                            pass
+
                     # Parse VMID from ID if present
                     if task_info['id']:
                         try:

@@ -721,6 +721,7 @@ def create_user():
         'tenant_id': tenant_id,
         'permissions': permissions,
         'denied_permissions': denied_permissions,
+        'portal_only': data.get('portal_only', False),
     }
     
     save_users(users_db)
@@ -799,6 +800,10 @@ def update_user(username):
                 return jsonify({'error': 'Cannot disable last admin'}), 400
         user['enabled'] = data['enabled']
     
+    # NS: Apr 2026 — portal_only flag (user can only log in via /portal)
+    if 'portal_only' in data:
+        user['portal_only'] = bool(data['portal_only'])
+
     # NS: Added tenant_id update support
     if 'tenant_id' in data:
         tenants = load_tenants()

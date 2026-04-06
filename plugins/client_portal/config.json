@@ -1,0 +1,11 @@
+{
+    "portal_title": "Client Portal",
+    "allowed_actions": ["vm.view", "vm.start", "vm.stop", "vm.console"],
+    "show_resource_usage": true,
+    "show_ip_addresses": true,
+    "allow_password_change": true,
+    "allow_snapshots": true,
+    "max_snapshots_per_vm": 5,
+    "custom_logo_url": "",
+    "theme_color": "#e57000"
+}
