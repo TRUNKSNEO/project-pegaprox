@@ -1618,6 +1618,21 @@
                                                                     background: vm.type === 'qemu' ? 'rgba(73,175,217,0.12)' : 'rgba(161,120,217,0.12)',
                                                                     color: vm.type === 'qemu' ? '#49afd9' : '#a178d9'
                                                                 }}>{vm.type === 'qemu' ? 'VM' : 'LXC'}</span>
+                                                                {vm.tags && (() => {
+                                                                    const tagList = (Array.isArray(vm.tags) ? vm.tags : vm.tags.split(';')).filter(t => t.trim());
+                                                                    return tagList.length > 0 ? (
+                                                                        <span className="flex gap-0.5 flex-shrink-0">
+                                                                            {tagList.slice(0, 2).map((tag, i) => (
+                                                                                <span key={i} className="px-1 py-0 text-[8px] rounded" style={{
+                                                                                    background: 'rgba(249,115,22,0.15)',
+                                                                                    color: '#f97316',
+                                                                                    lineHeight: '14px'
+                                                                                }}>{tag.trim()}</span>
+                                                                            ))}
+                                                                            {tagList.length > 2 && <span className="text-[8px]" style={{color: '#728b9a'}}>+{tagList.length - 2}</span>}
+                                                                        </span>
+                                                                    ) : null;
+                                                                })()}
                                                                 {vm.status === 'running' && (
                                                                     <span className="text-[10px] ml-auto flex-shrink-0" style={{color: '#728b9a'}}>
                                                                         {((vm.cpu || 0) * 100).toFixed(0)}% &middot; {fmtMem(vm.mem)}

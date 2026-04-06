@@ -112,7 +112,11 @@
             const [activeTab, setActiveTab] = useState('general');
             const [changes, setChanges] = useState({});
             const [hasChanges, setHasChanges] = useState(false);
-            
+            const [descEditMode, setDescEditMode] = useState(false);
+            const [clusterTags, setClusterTags] = useState([]);
+            const [tagInputValue, setTagInputValue] = useState('');
+            const [showTagDropdown, setShowTagDropdown] = useState(false);
+
             // Additional states for hardware options and lists
             const [hardwareOptions, setHardwareOptions] = useState(null);
             const [storageList, setStorageList] = useState([]);
@@ -239,7 +243,22 @@
                 fetchCrossClusterRepls();
                 fetchBackups();
                 fetchClusterNodes();
-                
+
+                // Fetch unique Proxmox tags from cluster resources for tag selector
+                authFetch(`${API_URL}/clusters/${clusterId}/resources`)
+                    .then(r => r && r.ok ? r.json() : [])
+                    .then(data => {
+                        const tagSet = new Set();
+                        (Array.isArray(data) ? data : []).forEach(vm => {
+                            if (vm.tags) {
+                                const tags = Array.isArray(vm.tags) ? vm.tags : vm.tags.split(';');
+                                tags.filter(t => t.trim()).forEach(t => tagSet.add(t.trim()));
+                            }
+                        });
+                        setClusterTags(Array.from(tagSet).sort().map(name => ({ name })));
+                    })
+                    .catch(() => {});
+
                 // NS: Listen for SSE vm_config events for live updates
                 const handleVmConfigUpdate = (event) => {
                     const { vmid: eventVmid, vm_type, config: newConfig } = event.detail;
@@ -1002,7 +1021,17 @@
 
             const handleSave = async () => {
                 if (Object.keys(changes).length === 0) return;
-                
+
+                // Validate VM name format (DNS-compatible)
+                const nameValue = 'name' in changes ? changes.name : ('hostname' in changes ? changes.hostname : undefined);
+                if (nameValue !== undefined && nameValue !== '') {
+                    const dnsRegex = /^[a-zA-Z]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$/;
+                    if (!dnsRegex.test(nameValue)) {
+                        addToast(t('invalidDnsName') || 'Invalid name: must start with a letter, only alphanumeric and hyphens allowed, max 63 characters', 'error');
+                        return;
+                    }
+                }
+
                 setSaving(true);
                 try {
                     const response = await authFetch(
@@ -1396,20 +1425,113 @@
                                                     value={getValue('general', isQemu ? 'name' : 'hostname')}
                                                     onChange={(v) => handleChange('general', isQemu ? 'name' : 'hostname', v)}
                                                 />
-                                                <ConfigInputField
-                                                    label={t('tags')}
-                                                    value={getValue('general', 'tags')}
-                                                    onChange={(v) => handleChange('general', 'tags', v)}
-                                                />
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-400 mb-1">{t('tags')}</label>
+                                                    <div className="w-full px-3 py-2 bg-proxmox-dark border border-proxmox-border rounded-lg min-h-[38px] relative">
+                                                        <div className="flex flex-wrap gap-1 mb-1">
+                                                            {(getValue('general', 'tags') || '').split(';').filter(t => t.trim()).map((tag, i) => (
+                                                                <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style={{
+                                                                    background: 'rgba(249,115,22,0.15)', color: '#f97316'
+                                                                }}>
+                                                                    {tag.trim()}
+                                                                    <button type="button" onClick={() => {
+                                                                        const current = (getValue('general', 'tags') || '').split(';').filter(t => t.trim());
+                                                                        current.splice(i, 1);
+                                                                        handleChange('general', 'tags', current.join(';'));
+                                                                    }} className="hover:text-red-400 ml-0.5">
+                                                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                                    </button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            placeholder={t('addTag') || 'Add tag...'}
+                                                            value={tagInputValue}
+                                                            onChange={(e) => { setTagInputValue(e.target.value); setShowTagDropdown(true); }}
+                                                            onFocus={() => setShowTagDropdown(true)}
+                                                            onBlur={() => setTimeout(() => setShowTagDropdown(false), 200)}
+                                                            className="bg-transparent text-white text-sm focus:outline-none w-full"
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' && tagInputValue.trim()) {
+                                                                    e.preventDefault();
+                                                                    const val = tagInputValue.trim();
+                                                                    if (!/^[a-z0-9][a-z0-9\-_.+]*$/.test(val)) {
+                                                                        addToast(t('invalidTagFormat') || 'Invalid format. Tags must be lowercase alphanumeric (hyphens, dots, underscores allowed).', 'error');
+                                                                        return;
+                                                                    }
+                                                                    const current = (getValue('general', 'tags') || '').split(';').filter(t => t.trim());
+                                                                    if (!current.includes(val)) {
+                                                                        current.push(val);
+                                                                        handleChange('general', 'tags', current.join(';'));
+                                                                    }
+                                                                    setTagInputValue('');
+                                                                }
+                                                            }}
+                                                        />
+                                                        {showTagDropdown && clusterTags.length > 0 && (() => {
+                                                            const currentTags = (getValue('general', 'tags') || '').split(';').filter(t => t.trim());
+                                                            const filtered = clusterTags.filter(ct =>
+                                                                !currentTags.includes(ct.name) &&
+                                                                (!tagInputValue || ct.name.toLowerCase().includes(tagInputValue.toLowerCase()))
+                                                            );
+                                                            return filtered.length > 0 ? (
+                                                                <div className="absolute left-0 right-0 top-full mt-1 bg-proxmox-darker border border-proxmox-border rounded-lg shadow-lg z-50 max-h-[150px] overflow-y-auto">
+                                                                    {filtered.map(ct => (
+                                                                        <button key={ct.name} type="button"
+                                                                            className="w-full px-3 py-1.5 text-left text-xs text-gray-300 hover:bg-proxmox-orange/10 hover:text-white flex items-center gap-2"
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                const current = (getValue('general', 'tags') || '').split(';').filter(t => t.trim());
+                                                                                current.push(ct.name);
+                                                                                handleChange('general', 'tags', current.join(';'));
+                                                                                setTagInputValue('');
+                                                                            }}
+                                                                        >
+                                                                            <span className="w-2 h-2 rounded-full" style={{background: ct.color || '#f97316'}} />
+                                                                            {ct.name}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            ) : null;
+                                                        })()}
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-400 mb-1">{t('description')}</label>
-                                                <textarea
-                                                    value={getValue('general', 'description')}
-                                                    onChange={(e) => handleChange('general', 'description', e.target.value)}
-                                                    rows={3}
-                                                    className="w-full px-3 py-2 bg-proxmox-dark border border-proxmox-border rounded-lg text-white text-sm focus:outline-none focus:border-proxmox-orange resize-none"
-                                                />
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <label className="text-xs font-medium text-gray-400">{t('description')}</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDescEditMode(!descEditMode)}
+                                                        className="text-xs px-2 py-0.5 rounded bg-proxmox-dark border border-proxmox-border text-gray-400 hover:text-white transition-colors"
+                                                    >
+                                                        {descEditMode ? (t('preview') || 'Preview') : (t('edit') || 'Edit')}
+                                                    </button>
+                                                </div>
+                                                {descEditMode ? (
+                                                    <textarea
+                                                        value={getValue('general', 'description')}
+                                                        onChange={(e) => handleChange('general', 'description', e.target.value)}
+                                                        rows={6}
+                                                        className="w-full px-3 py-2 bg-proxmox-dark border border-proxmox-border rounded-lg text-white text-sm focus:outline-none focus:border-proxmox-orange"
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        className="w-full px-3 py-2 border border-proxmox-border rounded-lg text-sm text-white min-h-[120px] cursor-pointer transition-colors"
+                                                        style={{overflowWrap: 'break-word', background: 'transparent'}}
+                                                        dangerouslySetInnerHTML={{
+                                                            __html: (() => {
+                                                                const raw = getValue('general', 'description');
+                                                                if (!raw) return '<span style="color:#6b7280">No description</span>';
+                                                                if (!window.marked) return (window.DOMPurify ? window.DOMPurify.sanitize(raw) : raw.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+                                                                const html = window.DOMPurify ? window.DOMPurify.sanitize(window.marked.parse(raw)) : window.marked.parse(raw).replace(/<script[\s\S]*?<\/script>/gi, '');
+                                                                return '<style>.md-desc table,.md-desc thead,.md-desc tbody,.md-desc tr,.md-desc th,.md-desc td{background:none!important;background-color:transparent!important;color:inherit!important}.md-desc table{border-collapse:collapse;width:100%;margin:8px 0}.md-desc th,.md-desc td{border:1px solid rgba(255,255,255,0.15)!important;padding:6px 12px}.md-desc th{background-color:rgba(255,255,255,0.05)!important;text-align:left}.md-desc tr:nth-child(even) td{background-color:rgba(255,255,255,0.02)!important}.md-desc a{color:#f97316;text-decoration:underline}.md-desc code{background:rgba(255,255,255,0.08)!important;padding:1px 4px;border-radius:3px;font-size:0.85em}.md-desc pre{background:rgba(255,255,255,0.05)!important;padding:12px;border-radius:6px;overflow-x:auto;margin:8px 0}.md-desc pre code{background:none!important;padding:0}.md-desc blockquote{border-left:3px solid #f97316;padding-left:12px;margin:8px 0;color:#9ca3af}.md-desc hr{border:none;border-top:1px solid rgba(255,255,255,0.1);margin:12px 0}.md-desc h1,.md-desc h2,.md-desc h3,.md-desc h4{color:inherit;margin:12px 0 6px}.md-desc p{margin:6px 0}.md-desc img{max-width:100%;border-radius:4px}</style><div class="md-desc">' + html + '</div>';
+                                                            })()
+                                                        }}
+                                                        onClick={() => setDescEditMode(true)}
+                                                    />
+                                                )}
                                             </div>
                                             {config.status && (
                                                 <div className="grid grid-cols-3 gap-4 p-4 bg-proxmox-dark rounded-lg">

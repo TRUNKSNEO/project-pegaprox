@@ -255,6 +255,8 @@
                 defaultTenant: 'Standard-Mandant',
                 tenantClusters: 'Cluster für diesen Mandanten',
                 allClusters: 'Alle Cluster',
+                allNodes: 'Alle Nodes',
+                allTags: 'Alle Tags',
 
                 // Cluster Groups - NS Jan 2026
                 clusterGroups: 'Cluster-Gruppen',
@@ -1953,6 +1955,9 @@
                 // Common notifications
                 connectionError: 'Verbindungsfehler',
                 saveFailed: 'Speichern fehlgeschlagen',
+                invalidDnsName: 'Ungültiger Name: muss mit einem Buchstaben beginnen, nur Buchstaben, Zahlen und Bindestriche erlaubt, max. 63 Zeichen',
+                addTag: 'Tag hinzufügen...',
+                invalidTagFormat: 'Ungültiges Format. Tags müssen klein geschrieben und alphanumerisch sein (Bindestriche, Punkte, Unterstriche erlaubt).',
                 deleteError: 'Fehler beim Löschen',
                 activationError: 'Fehler beim Aktivieren',
                 deactivationError: 'Fehler beim Beenden',
@@ -3281,6 +3286,8 @@
                 defaultTenant: 'Default Tenant',
                 tenantClusters: 'Clusters for this tenant',
                 allClusters: 'All clusters',
+                allNodes: 'All Nodes',
+                allTags: 'All Tags',
 
                 // Cluster Groups - NS Jan 2026
                 clusterGroups: 'Cluster Groups',
@@ -4995,6 +5002,9 @@
                 // Common notifications
                 connectionError: 'Connection error',
                 saveFailed: 'Save failed',
+                invalidDnsName: 'Invalid name: must start with a letter, only alphanumeric and hyphens allowed, max 63 characters',
+                addTag: 'Add tag...',
+                invalidTagFormat: 'Invalid format. Tags must be lowercase alphanumeric (hyphens, dots, underscores allowed).',
                 deleteError: 'Delete error',
                 activationError: 'Activation error',
                 deactivationError: 'Deactivation error',
@@ -7900,6 +7910,9 @@
                 // Common notifications
                 connectionError: 'Erreur de connexion',
                 saveFailed: 'Échec de sauvegarde',
+                invalidDnsName: 'Nom invalide : doit commencer par une lettre, uniquement alphanumériques et tirets, max 63 caractères',
+                addTag: 'Ajouter un tag...',
+                invalidTagFormat: 'Format invalide. Les tags doivent être en minuscules alphanumériques (tirets, points, underscores autorisés).',
                 deleteError: 'Erreur de suppression',
                 activationError: 'Erreur d\'activation',
                 deactivationError: 'Erreur de désactivation',
@@ -10815,6 +10828,9 @@
                 // Common notifications / Notificaciones comunes
                 connectionError: 'Error de conexión',
                 saveFailed: 'Falló guardar',
+                invalidDnsName: 'Nombre inválido: debe comenzar con una letra, solo alfanuméricos y guiones, máx. 63 caracteres',
+                addTag: 'Agregar etiqueta...',
+                invalidTagFormat: 'Formato inválido. Las etiquetas deben ser alfanuméricas en minúsculas (guiones, puntos, guiones bajos permitidos).',
                 deleteError: 'Error de remoción',
                 activationError: 'Error de activación',
                 deactivationError: 'Error de desactivación',
@@ -13766,6 +13782,9 @@
 
                 // Common notifications
                 saveFailed: 'Falha ao salvar',
+                invalidDnsName: 'Nome inválido: deve começar com uma letra, apenas alfanuméricos e hifens, máx. 63 caracteres',
+                addTag: 'Adicionar tag...',
+                invalidTagFormat: 'Formato inválido. Tags devem ser alfanuméricos em minúsculas (hifens, pontos, underscores permitidos).',
                 deleteError: 'Erro ao excluir',
                 activationError: 'Erro de ativação',
                 deactivationError: 'Erro de desativação',

@@ -1215,6 +1215,8 @@
             }, [resources]);
             const [search, setSearch] = useState('');
             const [filter, setFilter] = useState('all');
+            const [nodeFilter, setNodeFilter] = useState('all');
+            const [tagFilter, setTagFilter] = useState('all');
             const [sortBy, setSortBy] = useState('vmid');
             const [sortDir, setSortDir] = useState('asc');
             const [viewMode, setViewMode] = useState(isCorporate ? 'table' : 'cards'); // LW: corporate defaults to table
@@ -1328,13 +1330,15 @@
                         (r.node || '').toLowerCase().includes(s) ||
                         (r.ip || '').toLowerCase().includes(s) ||
                         (r.tags || '').toLowerCase().includes(s);
-                    const matchesFilter = 
+                    const matchesFilter =
                         filter === 'all' ||
                         (filter === 'running' && r.status === 'running') ||
                         (filter === 'stopped' && r.status === 'stopped') ||
                         (filter === 'vm' && r.type === 'qemu') ||
                         (filter === 'lxc' && r.type === 'lxc');
-                    return matchesSearch && matchesFilter;
+                    const matchesNode = nodeFilter === 'all' || r.node === nodeFilter;
+                    const matchesTag = tagFilter === 'all' || (Array.isArray(r.tags) ? r.tags : (r.tags || '').split(';')).some(t => t.trim().toLowerCase() === tagFilter.toLowerCase());
+                    return matchesSearch && matchesFilter && matchesNode && matchesTag;
                 });
                 
                 // sort
@@ -1347,13 +1351,13 @@
                 });
                 
                 return filtered;
-            }, [resources, search, filter, sortBy, sortDir]);
+            }, [resources, search, filter, nodeFilter, tagFilter, sortBy, sortDir]);
             
             // Reset page when filters change - MK Jan 2026
             // NS: Also reset when cluster changes (via clusterId) to avoid showing empty page
             useEffect(() => {
                 setCurrentPage(1);
-            }, [search, filter, sortBy, sortDir, itemsPerPage, clusterId]);
+            }, [search, filter, nodeFilter, tagFilter, sortBy, sortDir, itemsPerPage, clusterId]);
             
             // Paginated resources - MK Jan 2026
             const totalPages = Math.max(1, Math.ceil(filteredResources.length / itemsPerPage));
@@ -1438,6 +1442,22 @@
                 }
             };
 
+            const availableNodes = useMemo(() => {
+                const nodeSet = new Set(resources.map(r => r.node).filter(Boolean));
+                return Array.from(nodeSet).sort();
+            }, [resources]);
+
+            const availableTags = useMemo(() => {
+                const tagSet = new Set();
+                resources.forEach(r => {
+                    if (r.tags) {
+                        const tags = Array.isArray(r.tags) ? r.tags : r.tags.split(';');
+                        tags.filter(t => t.trim()).forEach(t => tagSet.add(t.trim()));
+                    }
+                });
+                return Array.from(tagSet).sort();
+            }, [resources]);
+
             const groupedByNode = useMemo(() => {
                 const groups = {};
                 filteredResources.forEach(r => {
@@ -1512,6 +1532,38 @@
                                     {filterLabels[f]}
                                 </button>
                             ))}
+                            {availableNodes.length > 1 && (
+                                <select
+                                    value={nodeFilter}
+                                    onChange={e => setNodeFilter(e.target.value)}
+                                    className={isCorporate
+                                        ? `corp-toolbar-filter ${nodeFilter !== 'all' ? 'active' : ''}`
+                                        : `px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                                            nodeFilter !== 'all'
+                                                ? 'bg-proxmox-orange text-white'
+                                                : 'bg-proxmox-dark text-gray-400 border border-proxmox-border'
+                                        }`}
+                                >
+                                    <option value="all">{t('allNodes') || 'All Nodes'}</option>
+                                    {availableNodes.map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                            )}
+                            {availableTags.length > 0 && (
+                                <select
+                                    value={tagFilter}
+                                    onChange={e => setTagFilter(e.target.value)}
+                                    className={isCorporate
+                                        ? `corp-toolbar-filter ${tagFilter !== 'all' ? 'active' : ''}`
+                                        : `px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                                            tagFilter !== 'all'
+                                                ? 'bg-proxmox-orange text-white'
+                                                : 'bg-proxmox-dark text-gray-400 border border-proxmox-border'
+                                        }`}
+                                >
+                                    <option value="all">{t('allTags') || 'All Tags'}</option>
+                                    {availableTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                                </select>
+                            )}
                         </div>
                         {isCorporate ? (
                         <div className="corp-toolbar-group">
