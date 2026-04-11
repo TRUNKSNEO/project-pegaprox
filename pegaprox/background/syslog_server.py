@@ -14,7 +14,6 @@ from datetime import datetime
 
 from pegaprox.constants import CONFIG_DIR
 
-# DB in config dir, not CWD
 DB_FILE = os.path.join(CONFIG_DIR, 'syslog.db')
 
 SEVERITY_MAP = {
@@ -23,7 +22,6 @@ SEVERITY_MAP = {
 }
 
 _syslog_thread = None
-_thread_local = threading.local()
 
 
 def _open_db(timeout=30):
@@ -31,14 +29,6 @@ def _open_db(timeout=30):
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA temp_store=MEMORY;")
-    return conn
-
-
-def _get_thread_db(timeout=5):
-    conn = getattr(_thread_local, 'conn', None)
-    if conn is None:
-        conn = _open_db(timeout=timeout)
-        _thread_local.conn = conn
     return conn
 
 
@@ -143,13 +133,16 @@ def _init_db():
 
 def _insert_log(entry):
     try:
-        conn = _get_thread_db(timeout=5)
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO logs (timestamp, source_ip, hostname, facility, severity, severity_text, message, protocol)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, entry)
-        conn.commit()
+        conn = _open_db(timeout=5)
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO logs (timestamp, source_ip, hostname, facility, severity, severity_text, message, protocol)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, entry)
+            conn.commit()
+        finally:
+            conn.close()
     except Exception as e:
         logging.debug(f"[Syslog] Insert failed: {e}")
 

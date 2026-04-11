@@ -29,8 +29,6 @@ def _syslog_search_terms(search_text):
 
 
 def _syslog_escape_fts_term(term):
-    # Keep FTS queries in literal phrase mode so user input cannot introduce
-    # operators like AND / OR / NOT / NEAR or prefix wildcards.
     sanitized = ''.join(ch for ch in term if ch.isprintable() and ch not in '\x00\r\n\t')
     sanitized = sanitized.replace('"', '""').strip()
     return f'"{sanitized}"' if sanitized else ''
