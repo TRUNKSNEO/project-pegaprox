@@ -548,7 +548,7 @@ def auth_login():
         # Verify TOTP code
         if TOTP_AVAILABLE:
             totp = pyotp.TOTP(user['totp_secret'])
-            if not totp.verify(totp_code):
+            if not totp.verify(totp_code, valid_window=1):  # MK: security audit — accept current + 1 previous window only
                 logging.warning(f"Invalid 2FA code for user: {username} from {client_ip}")
                 locked = record_failed_attempt(username)
                 if locked:
@@ -931,6 +931,19 @@ def get_cluster_creds_internal(cluster_id):
 @require_auth()
 def verify_password_api():
     """Verify current user's password — for re-auth before sensitive ops (#256)"""
+    # MK: security audit — rate limit to prevent brute-force after session compromise
+    from pegaprox.utils.audit import get_client_ip
+    client_ip = get_client_ip()
+    vp_key = f'verify_pw_{client_ip}'
+    if vp_key in login_attempts_by_ip:
+        attempts = login_attempts_by_ip[vp_key].get('attempts', [])
+        recent = [t for t in attempts if time.time() - t < 300]
+        if len(recent) >= 5:
+            return jsonify({'error': 'Too many attempts. Try again in 5 minutes.'}), 429
+        login_attempts_by_ip[vp_key] = {'attempts': recent + [time.time()]}
+    else:
+        login_attempts_by_ip[vp_key] = {'attempts': [time.time()]}
+
     data = request.get_json() or {}
     password = data.get('password', '')
     if not password:
@@ -1127,7 +1140,7 @@ def verify_2fa_setup():
     
     # Verify the code
     totp = pyotp.TOTP(pending_secret)
-    if not totp.verify(code):
+    if not totp.verify(code, valid_window=1):
         return jsonify({'error': 'Invalid TOTP code'}), 401
     
     # Activate 2FA

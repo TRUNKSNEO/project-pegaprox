@@ -555,10 +555,38 @@ class VMwareManager:
             
             # Detect firmware (BIOS vs EFI)
             firmware = 'bios'
+            secure_boot = False
             if cfg:
                 fw = getattr(cfg, 'firmware', '') or ''
                 if 'efi' in str(fw).lower():
                     firmware = 'efi'
+                # MK: Apr 2026 — detect Secure Boot for OVMF pre-enrolled-keys (#222)
+                try:
+                    boot_opts = getattr(cfg, 'bootOptions', None)
+                    if boot_opts and getattr(boot_opts, 'efiSecureBootEnabled', False):
+                        secure_boot = True
+                except: pass
+
+            # MK: extended detection for migration wizard (#222)
+            guest_id = getattr(cfg, 'guestId', '') if cfg else ''
+            cores_per_socket = 1
+            cpu_count = 0
+            if cfg and cfg.hardware:
+                cpu_count = cfg.hardware.numCPU or 0
+                cores_per_socket = getattr(cfg.hardware, 'numCoresPerSocket', 1) or 1
+            sockets = max(1, cpu_count // cores_per_socket) if cores_per_socket else 1
+
+            notes = ''
+            try: notes = getattr(cfg, 'annotation', '') or ''
+            except: pass
+
+            # scan for TPM device
+            has_tpm = False
+            if cfg and cfg.hardware and cfg.hardware.device:
+                for dev in cfg.hardware.device:
+                    if 'VirtualTPM' in type(dev).__name__:
+                        has_tpm = True
+                        break
             
             # Determine primary SCSI controller type
             primary_scsi = 'virtio-scsi-single'
@@ -587,18 +615,22 @@ class VMwareManager:
                 'vm': vm._moId,
                 'name': cfg.name if cfg else vm.name,
                 'power_state': str(runtime.powerState).replace('powered', 'POWERED_').upper() if runtime else 'UNKNOWN',
-                'cpu': {'count': cfg.hardware.numCPU if cfg and cfg.hardware else 0},
+                'cpu': {'count': cpu_count, 'sockets': sockets, 'cores_per_socket': cores_per_socket},
                 'memory': {'size_MiB': cfg.hardware.memoryMB if cfg and cfg.hardware else 0},
                 'guest_OS': cfg.guestFullName if cfg else '',
+                'guest_id': guest_id,
                 'hardware': {
                     'version': cfg.version if cfg else '',
                     'firmware': firmware,
+                    'secure_boot': secure_boot,
+                    'has_tpm': has_tpm,
                     'scsi_controller': primary_scsi_vmware,
                     'scsi_controller_pve': primary_scsi,
                     'nic_type': primary_nic_vmware,
                     'nic_type_pve': primary_nic,
                     'disk_bus': primary_disk_bus,
                 },
+                'notes': notes,
                 'controllers': {
                     'scsi': list(scsi_controllers.values()),
                     'sata': list(sata_controllers.values()),

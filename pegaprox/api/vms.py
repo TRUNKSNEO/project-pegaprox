@@ -4742,14 +4742,31 @@ def _execute_local_replication(job):
 
         clone_vmid = int(nextid_resp.json().get('data'))
 
-        # 4. clone from snapshot (full clone to target storage)
+        # 4. clone — check storage type for snapshot compatibility (#192)
         clone_url = f"https://{mgr.host}:8006/api2/json/nodes/{source_node}/{vm_type}/{vmid}/clone"
+        # MK: verified against PVE storage plugins (copy+snap feature matrix)
+        # rbd DOES support snap clone. lvm only supports qcow2 snap clone (VMs are raw).
+        # zfs (iSCSI) and zfspool (local) both lack snap support. LXC uses rsync, not affected.
+        _no_snap_clone_types = {'zfspool', 'zfs', 'lvm', 'iscsi', 'iscsidirect'}
+        use_snap_clone = True
+        try:
+            stor_resp = mgr._api_get(f"https://{mgr.host}:8006/api2/json/storage")
+            if stor_resp.status_code == 200:
+                stor_types = {s['storage']: s.get('type', '') for s in stor_resp.json().get('data', [])}
+                vm_stor = mgr._get_vm_storage(source_node, vmid, vm_type)
+                if vm_type == 'qemu' and vm_stor and stor_types.get(vm_stor) in _no_snap_clone_types:
+                    use_snap_clone = False
+                    logging.info(f"[REPL] Storage '{vm_stor}' is {stor_types.get(vm_stor)} — direct clone (#192)")
+        except:
+            pass
+
         clone_data = {
             'newid': clone_vmid,
-            'snapname': snap_name,
             'full': 1,
             'name': f'repl-{vmid}-{target_node}',
         }
+        if use_snap_clone:
+            clone_data['snapname'] = snap_name
         if target_storage:
             clone_data['storage'] = target_storage
 
@@ -4940,20 +4957,37 @@ def _execute_replication(job):
         clone_vmid = int(nextid_resp.json().get('data'))
         logging.debug(f"[XCREPL] Using clone VMID {clone_vmid}")
 
-        # 4. clone from snapshot (full clone, not linked)
+        # 4. clone — detect storage type first to choose correct strategy (#192)
+        # ZFS and RBD don't support full clone from snapshot, must clone directly
         clone_url = (
             f"https://{source_mgr.host}:8006/api2/json/nodes/{source_node}"
             f"/{vm_type}/{vmid}/clone"
         )
+        # MK: Apr 2026 — check if storage supports full clone from snapshot
+        # MK: verified against PVE storage plugins (copy+snap feature matrix)
+        # rbd DOES support snap clone. lvm only supports qcow2 snap clone (VMs are raw).
+        # zfs (iSCSI) and zfspool (local) both lack snap support. LXC uses rsync, not affected.
+        _no_snap_clone_types = {'zfspool', 'zfs', 'lvm', 'iscsi', 'iscsidirect'}
+        use_snap_clone = True
+        try:
+            stor_resp = source_mgr._api_get(f"https://{source_mgr.host}:8006/api2/json/storage")
+            if stor_resp.status_code == 200:
+                stor_types = {s['storage']: s.get('type', '') for s in stor_resp.json().get('data', [])}
+                # get the VM's primary storage
+                vm_stor = source_mgr._get_vm_storage(source_node, vmid, vm_type)
+                if vm_type == 'qemu' and vm_stor and stor_types.get(vm_stor) in _no_snap_clone_types:
+                    use_snap_clone = False
+                    logging.info(f"[XCREPL] Storage '{vm_stor}' is {stor_types.get(vm_stor)} — using direct clone without snapshot (#192)")
+        except Exception as e:
+            logging.debug(f"[XCREPL] Could not detect storage type: {e}")
+
         clone_data = {
             'newid': clone_vmid,
-            'snapname': snap_name,
             'full': 1,
             'name': f'xcrepl-{vmid}-tmp',
         }
-        # #192: don't set storage here — target_storage is for the TARGET cluster,
-        # but the clone runs on the SOURCE cluster. Let PVE use the source VM's storage.
-        # target_storage is correctly passed to remote_migrate_vm() below.
+        if use_snap_clone:
+            clone_data['snapname'] = snap_name
 
         clone_resp = source_mgr._api_post(clone_url, data=clone_data)
         if clone_resp.status_code != 200:

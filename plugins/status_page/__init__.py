@@ -66,7 +66,8 @@ def _get_config():
         return err
     cfg = _load_config()
     return {
-        'auth_key': cfg.get('auth_key', ''),
+        # MK: security audit — mask key in API response, only show last 4 chars
+        'auth_key': ('*' * 20 + cfg.get('auth_key', '')[-4:]) if cfg.get('auth_key') else '',
         'page_title': cfg.get('page_title', 'System Status'),
         'refresh_interval': cfg.get('refresh_interval', 30),
         'show_node_details': cfg.get('show_node_details', True),

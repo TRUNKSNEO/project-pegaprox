@@ -66,7 +66,14 @@ def _send_ntfy(alert_data, cfg):
         'Tags': f"pegaprox,{alert_data.get('severity', 'info')},{alert_data.get('metric', '')}",
     }
     token = cfg.get('ntfy_token', '')
+    # MK: security audit — token may be encrypted, try decrypting
     if token:
+        try:
+            from pegaprox.core.db import get_db
+            decrypted = get_db()._decrypt(token)
+            if decrypted:
+                token = decrypted
+        except: pass
         headers['Authorization'] = f"Bearer {token}"
 
     try:
@@ -86,9 +93,14 @@ def _send_apprise(alert_data, cfg):
     urls = cfg.get('apprise_urls', [])
     if not urls:
         return False, 'No apprise URLs configured'
+    # MK: security audit — block SSRF-prone URL schemes
+    _blocked = ('file://', 'http://localhost', 'http://127.', 'http://0.', 'http://[::1]', 'http://10.', 'http://172.', 'http://192.168.')
     try:
         ap = apprise.Apprise()
         for u in urls:
+            if any(u.lower().startswith(b) for b in _blocked):
+                logging.warning(f"[Notifications] Blocked SSRF-prone apprise URL: {u[:50]}")
+                continue
             ap.add(u)
         ok = ap.notify(
             title=f"PegaProx: {alert_data.get('alert_name', 'Alert')}",

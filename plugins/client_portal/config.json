@@ -7,5 +7,8 @@
     "allow_snapshots": true,
     "max_snapshots_per_vm": 5,
     "custom_logo_url": "",
-    "theme_color": "#e57000"
+    "theme_color": "#e57000",
+    "allow_iso_mount": false,
+    "iso_storage": "",
+    "allowed_isos": []
 }

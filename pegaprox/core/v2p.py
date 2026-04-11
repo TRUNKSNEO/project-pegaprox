@@ -62,12 +62,36 @@ class V2PMigrationTask:
         self.esxi_datastore = self.config.get('esxi_datastore', '')
         self.esxi_vm_dir = self.config.get('esxi_vm_dir', '')
         # Advanced options
-        self.net_driver = self.config.get('net_driver', '')  # auto-detect, or: e1000, e1000e, virtio, vmxnet3
-        self.disk_bus = self.config.get('disk_bus', '')  # auto-detect, or: scsi, sata, ide
-        self.transfer_mode = self.config.get('transfer_mode', 'auto')  # auto, sshfs_boot, offline
-        self.bios_override = self.config.get('bios', 'auto')  # auto, seabios, ovmf
-        self.selected_nics = self.config.get('selected_nics', None)  # list of NIC dicts or None for all
+        self.net_driver = self.config.get('net_driver', '')
+        self.disk_bus = self.config.get('disk_bus', '')
+        self.transfer_mode = self.config.get('transfer_mode', 'auto')
+        self.bios_override = self.config.get('bios', 'auto')
+        self.selected_nics = self.config.get('selected_nics', None)
         self.preserve_mac = self.config.get('preserve_mac', False)
+        # MK: Apr 2026 — extended migration config (#222)
+        self.ostype = self.config.get('ostype', 'auto')
+        self.cpu_type = self.config.get('cpu_type', 'host')
+        self.vga = self.config.get('vga', 'vmware')
+        self.sockets = self.config.get('sockets', 0)
+        self.cores_per_socket = self.config.get('cores_per_socket', 0)
+        self.memory = self.config.get('memory', 0)
+        self.scsihw_override = self.config.get('scsihw', '')
+        self.disk_format = self.config.get('disk_format', 'raw')
+        self.disk_cache = self.config.get('disk_cache', 'none')
+        self.disk_iothread = self.config.get('disk_iothread', True)
+        self.disk_discard = self.config.get('disk_discard', 'on')
+        self.disk_ssd = self.config.get('disk_ssd', False)
+        self.secure_boot = self.config.get('secure_boot', None)  # None = auto-detect
+        self.tpm_enabled = self.config.get('tpm_enabled', None)
+        self.tpm_version = self.config.get('tpm_version', 'v2.0')
+        self.numa = self.config.get('numa', False)
+        self.agent = self.config.get('agent', True)
+        self.balloon = self.config.get('balloon', 0)
+        self.hotplug = self.config.get('hotplug', 'disk,network')
+        self.onboot = self.config.get('onboot', False)
+        self.protection = self.config.get('protection', False)
+        self.tags = self.config.get('tags', '')
+        self.description = self.config.get('description', '')
     
     def log(self, msg):
         ts = datetime.now().strftime('%H:%M:%S')
@@ -348,14 +372,26 @@ def _run_v2p_migration(task):
             else:
                 bios = 'seabios'; machine = 'pc'
 
-        # OS type for Proxmox
-        ostype = 'l26'
-        if 'windows' in guest_os:
-            ostype = 'win11' if any(x in guest_os for x in ['11', '2022', '2025']) else 'win10'
-            # NS: removed forced EFI override — user can choose BIOS in migration wizard
+        # OS type: prefer guestId mapping, fallback to string matching
+        from pegaprox.core.xhm import _ESXI_TO_PVE_OSTYPE
+        ostype_override = getattr(task, 'ostype', '') or getattr(task, 'ostype_override', '') or ''
+        if ostype_override and ostype_override != 'auto':
+            ostype = ostype_override
+        else:
+            guest_id = vm_data.get('guest_id', '')
+            ostype = _ESXI_TO_PVE_OSTYPE.get(guest_id, '')
+            if not ostype:
+                # fallback to string matching on guest_os name
+                if 'windows' in guest_os:
+                    ostype = 'win11' if any(x in guest_os for x in ['11', '2022', '2025']) else 'win10'
+                else:
+                    ostype = 'l26'
         
-        # SCSI controller: match VMware (PVSCSI, LSI Logic, etc.)
-        scsihw = hw.get('scsi_controller_pve', 'virtio-scsi-single')
+        # SCSI controller: user override or match VMware
+        if task.scsihw_override and task.scsihw_override not in ('', 'auto'):
+            scsihw = task.scsihw_override
+        else:
+            scsihw = hw.get('scsi_controller_pve', 'virtio-scsi-single')
         if task.disk_bus == 'scsi' and scsihw not in ('pvscsi', 'lsi', 'lsi53c810', 'megasas', 'virtio-scsi-pci', 'virtio-scsi-single'):
             scsihw = 'virtio-scsi-single'
         
@@ -374,17 +410,50 @@ def _run_v2p_migration(task):
         if not pve_name or not pve_name[0].isalpha():
             pve_name = f'vm-{pve_name}'[:63]
 
+        # MK: Apr 2026 — fully configurable VM creation (#222)
+        cpu_type = getattr(task, 'cpu_type', 'host') or 'host'
+        vga_type = getattr(task, 'vga', 'vmware') or 'vmware'
+        task_sockets = getattr(task, 'sockets', 0) or 0
+        task_cores = getattr(task, 'cores_per_socket', 0) or 0
+        # prefer user values, fallback to ESXi detection
+        cpu_data = vm_data.get('cpu', {})
+        actual_sockets = task_sockets if task_sockets else cpu_data.get('sockets', 1)
+        actual_cores = task_cores if task_cores else cpu_data.get('cores_per_socket', vm_data.get('cpu_count', 1))
+
         pve_config = {
             'vmid': task.proxmox_vmid,
             'name': pve_name,
-            'memory': vm_data.get('memory_mb', 2048),
-            'cores': vm_data.get('cpu_count', 1),
-            'sockets': 1,
+            'memory': getattr(task, 'memory', 0) or vm_data.get('memory_mb', 2048),
+            'cores': actual_cores,
+            'sockets': actual_sockets,
             'ostype': ostype, 'bios': bios, 'machine': machine,
             'scsihw': scsihw,
-            'cpu': 'host',
+            'cpu': cpu_type,
             'boot': f'order={disk_bus}0;net0',
+            'vga': vga_type,
         }
+        # optional fields — only set if user configured them
+        disk_cache = getattr(task, 'disk_cache', '') or ''
+        if getattr(task, 'numa', False):
+            pve_config['numa'] = 1
+        if getattr(task, 'agent', True):
+            pve_config['agent'] = 'enabled=1'
+        balloon = getattr(task, 'balloon', 0) or 0
+        if balloon:
+            pve_config['balloon'] = balloon
+        hotplug = getattr(task, 'hotplug', '')
+        if hotplug:
+            pve_config['hotplug'] = hotplug
+        if getattr(task, 'onboot', False):
+            pve_config['onboot'] = 1
+        if getattr(task, 'protection', False):
+            pve_config['protection'] = 1
+        tags = getattr(task, 'tags', '') or ''
+        if tags:
+            pve_config['tags'] = tags
+        description = getattr(task, 'description', '') or vm_data.get('notes', '')
+        if description:
+            pve_config['description'] = description
 
         # NS: create all selected NICs (not just primary), optionally preserve MACs
         selected_nics = getattr(task, 'selected_nics', None) or vm_data.get('nics', [])
@@ -399,7 +468,19 @@ def _run_v2p_migration(task):
         else:
             pve_config['net0'] = f'{net_driver},bridge={task.network_bridge}'
         if bios == 'ovmf':
-            pve_config['efidisk0'] = f'{task.target_storage}:1,efitype=4m,pre-enrolled-keys=0'
+            # secure boot: auto-detect from ESXi or user override
+            sb = getattr(task, 'secure_boot', None)
+            if sb is None:
+                sb = hw.get('secure_boot', False)
+            pre_keys = '1' if sb else '0'
+            pve_config['efidisk0'] = f'{task.target_storage}:1,efitype=4m,pre-enrolled-keys={pre_keys}'
+        # TPM: auto-detect or user override
+        tpm = getattr(task, 'tpm_enabled', None)
+        if tpm is None:
+            tpm = hw.get('has_tpm', False)
+        if tpm:
+            tpm_ver = getattr(task, 'tpm_version', 'v2.0') or 'v2.0'
+            pve_config['tpmstate0'] = f'{task.target_storage}:1,version={tpm_ver}'
         
         if pve_name != raw_name:
             task.log(f"VM name sanitized: '{raw_name}' -> '{pve_name}' (PVE requires DNS-valid names)")
@@ -1249,18 +1330,15 @@ def _pvesm_alloc_disk(pve_mgr, node, storage, vmid, disk_index, size_bytes):
         f"sed -i '/^unused.*vm-{vmid}-disk-{disk_index}/d' "
         f"/etc/pve/qemu-server/{vmid}.conf 2>/dev/null", timeout=5)
     
-    # Try allocation methods in order of reliability
+    # MK: Apr 2026 — always try raw first, only fall back to qcow2 if raw fails on all attempts (#222)
+    # Mixed formats (raw+qcow2) cause confusion and the dd/importdisk path always uses --format raw
     alloc_attempts = [
-        # 1. Proper filename + size in G (most reliable)
         f"pvesm alloc {storage} {vmid} {fn_raw} {size_gb}G 2>&1",
-        # 2. Proper filename + size in KB (integer)
         f"pvesm alloc {storage} {vmid} {fn_raw} {size_kb} 2>&1",
-        # 3. With --format raw
         f"pvesm alloc {storage} {vmid} {fn_raw} {size_gb}G --format raw 2>&1",
-        # 4. qcow2 filename for dir storage
-        f"pvesm alloc {storage} {vmid} {fn_qcow} {size_gb}G --format qcow2 2>&1",
-        # 5. Size in MB
         f"pvesm alloc {storage} {vmid} {fn_raw} {size_mb}M 2>&1",
+        # last resort: qcow2 for dir/nfs storage that requires a file extension
+        f"pvesm alloc {storage} {vmid} {fn_qcow} {size_gb}G --format qcow2 2>&1",
     ]
     
     last_error = ''
@@ -3296,6 +3374,12 @@ exit $((S + R))
         
         _pve_node_exec(pve_mgr, task.target_node,
             f"echo 'boot: order={disk_bus}0' >> {conf_path}", timeout=5)
+        # MK: ensure BIOS config is preserved after sed cleanup (#222)
+        if bios == 'ovmf':
+            _pve_node_exec(pve_mgr, task.target_node,
+                f"grep -q '^bios:' {conf_path} || echo 'bios: ovmf' >> {conf_path}", timeout=5)
+            _pve_node_exec(pve_mgr, task.target_node,
+                f"grep -q '^machine:' {conf_path} || echo 'machine: q35' >> {conf_path}", timeout=5)
         task.log(f"  Boot: order={disk_bus}0")
         task.log(f"  VM {task.proxmox_vmid} continues running - ZERO downtime ✓")
         
@@ -3367,43 +3451,48 @@ exit $((S + R))
             _pve_node_exec(pve_mgr, task.target_node,
                 f"sed -i '/^{disk_bus}{di}:/d' {conf_path}", timeout=5)
     
-        # Attach volumes (importdisk or dd-based)
-        has_imported_vols = all(
-            local_volumes[di][0] for di in range(len(descriptor_files))
-            if di < len(local_volumes)
-        )
-        
-        if has_imported_vols:
-            task.log("Attaching imported volumes...")
-            for di in range(len(descriptor_files)):
-                vol_id = local_volumes[di][0] if di < len(local_volumes) else ''
-                if not vol_id:
-                    task.log(f"  WARNING: No volume for disk {di}")
-                    continue
-                escaped_vol = vol_id.replace('/', '\\/')
-                _pve_node_exec(pve_mgr, task.target_node,
-                    f"sed -i '/^unused.*{escaped_vol}/d' {conf_path}", timeout=5)
-                rc_at, out_at, _ = _pve_node_exec(pve_mgr, task.target_node,
-                    f"qm set {task.proxmox_vmid} --{disk_bus}{di} {vol_id} 2>&1", timeout=15)
-                at_out = str(out_at or '').strip()
-                if rc_at == 0 and 'error' not in at_out.lower():
-                    task.log(f"  Disk {di}: {disk_bus}{di} → {vol_id} ✓")
+        # MK: Apr 2026 — attach ALL disks that have volume IDs, not just when ALL are present (#222)
+        # Old logic: `all(...)` required every disk to succeed → if one failed, none got attached
+        task.log("Attaching volumes...")
+        attached_count = 0
+        for di in range(len(descriptor_files)):
+            vol_id = local_volumes[di][0] if di < len(local_volumes) else ''
+            if not vol_id:
+                task.log(f"  WARNING: No volume for disk {di} — skipping")
+                continue
+            # remove any unused: line that importdisk may have created
+            escaped_vol = vol_id.replace('/', '\\/')
+            _pve_node_exec(pve_mgr, task.target_node,
+                f"sed -i '/^unused.*{escaped_vol}/d' {conf_path}", timeout=5)
+            rc_at, out_at, _ = _pve_node_exec(pve_mgr, task.target_node,
+                f"qm set {task.proxmox_vmid} --{disk_bus}{di} {vol_id} 2>&1", timeout=15)
+            at_out = str(out_at or '').strip()
+            if rc_at == 0 and 'error' not in at_out.lower():
+                task.log(f"  Disk {di}: {disk_bus}{di} → {vol_id} ✓")
+                attached_count += 1
+            else:
+                task.log(f"  WARNING: qm set --{disk_bus}{di} {vol_id} failed: {at_out[:150]}")
+
+        # fallback: scan for any remaining unused disks and try to attach them
+        if attached_count == 0:
+            task.log("No disks attached via volume IDs — scanning for unused disks...")
+            rc_cfg, cfg_out, _ = _pve_node_exec(pve_mgr, task.target_node,
+                f"qm config {task.proxmox_vmid} 2>&1", timeout=10)
+            cfg_text = str(cfg_out or '')
+            import re as _re
+            for um in _re.finditer(r'unused(\d+):\s*(\S+)', cfg_text):
+                unused_idx = int(um.group(1))
+                unused_vol = um.group(2)
+                di = unused_idx  # map unused0 → disk0, etc.
+                rc_rescue, out_rescue, _ = _pve_node_exec(pve_mgr, task.target_node,
+                    f"qm set {task.proxmox_vmid} --{disk_bus}{di} {unused_vol} 2>&1", timeout=15)
+                if rc_rescue == 0:
+                    task.log(f"  Rescued unused{unused_idx} → {disk_bus}{di}: {unused_vol} ✓")
+                    attached_count += 1
                 else:
-                    task.log(f"  WARNING: qm set --{disk_bus}{di} {vol_id} failed: {at_out[:150]}")
-        else:
-            task.log("Attaching dd-copied volumes...")
-            for di in range(len(descriptor_files)):
-                vol_id = local_volumes[di][0] if di < len(local_volumes) else ''
-                if vol_id:
-                    rc_set, out_set, _ = _pve_node_exec(pve_mgr, task.target_node,
-                        f"qm set {task.proxmox_vmid} --{disk_bus}{di} {vol_id} 2>&1", timeout=15)
-                    set_out = str(out_set or '').strip()
-                    if rc_set == 0 and 'error' not in set_out.lower():
-                        task.log(f"  {disk_bus}{di}: {vol_id}")
-                    else:
-                        task.log(f"  WARNING: qm set --{disk_bus}{di} {vol_id} failed: {set_out[:150]}")
-        
-        # Set boot order
+                    task.log(f"  WARNING: rescue attach failed: {str(out_rescue or '')[:150]}")
+
+        # set boot order
         rc_boot, out_boot, _ = _pve_node_exec(pve_mgr, task.target_node,
             f"qm set {task.proxmox_vmid} --boot order={disk_bus}0 2>&1", timeout=10)
         boot_out = str(out_boot or '').strip()
@@ -3411,6 +3500,20 @@ exit $((S + R))
             task.log(f"  Boot: order={disk_bus}0")
         else:
             task.log(f"  WARNING: boot order failed: {boot_out[:150]}")
+
+        # MK: Apr 2026 — ensure BIOS/OVMF config is correct after disk operations (#222)
+        # VM creation set bios/machine/efidisk0, but sed cleanup might have removed them
+        if bios == 'ovmf':
+            _pve_node_exec(pve_mgr, task.target_node,
+                f"qm set {task.proxmox_vmid} --bios ovmf --machine q35 2>&1", timeout=10)
+            # check if efidisk0 exists, create if missing
+            rc_chk, cfg_chk, _ = _pve_node_exec(pve_mgr, task.target_node,
+                f"qm config {task.proxmox_vmid} 2>&1 | grep -c efidisk0", timeout=10)
+            if str(cfg_chk or '').strip() == '0':
+                _pve_node_exec(pve_mgr, task.target_node,
+                    f"qm set {task.proxmox_vmid} --efidisk0 {task.target_storage}:1,efitype=4m,pre-enrolled-keys={'1' if getattr(task, 'secure_boot', False) else '0'} 2>&1", timeout=15)
+                task.log("  EFI disk created (OVMF firmware detected)")
+            task.log(f"  BIOS: ovmf, Machine: q35 ✓")
         
         # Start VM on local storage
         if task.start_after or vm_running_on_ssh:

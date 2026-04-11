@@ -150,7 +150,7 @@ if(savedTheme === 'light') document.documentElement.setAttribute('data-theme', '
 
 const API=window.location.origin;
 const P=`${API}/api/plugins/client_portal/api`;
-let S={screen:'login',user:null,sid:localStorage.getItem('portal-sid'),vms:[],cfg:{},loading:false,err:null,modal:null,searchQuery:'',filterStatus:'all',lastRefresh:null,theme:savedTheme,oidcEnabled:false,oidcButtonText:'Sign in with SSO'};
+let S={screen:'login',user:null,sid:sessionStorage.getItem('portal-sid'),vms:[],cfg:{},loading:false,err:null,modal:null,searchQuery:'',filterStatus:'all',lastRefresh:null,theme:savedTheme,oidcEnabled:false,oidcButtonText:'Sign in with SSO'};
 
 // confirm modal state
 let pendingConfirm = null;
@@ -243,13 +243,13 @@ async function login(u,p,totpCode){
                 fetch(`${API}/api/auth/logout`,{method:'POST',credentials:'include'}).catch(()=>{});
                 S.loading=false;render();return;
             }
-            S.sid=d.session_id;S.user=d.user;localStorage.setItem('portal-sid',d.session_id);
+            S.sid=d.session_id;S.user=d.user;sessionStorage.setItem('portal-sid',d.session_id);
             S.screen='dashboard';S.pending2fa=null;await loadCfg();await loadVMs();
         }else{S.err=d.error||'Login failed';S.pending2fa=null;}
     }catch(e){S.err='Connection error';}
     S.loading=false;render();
 }
-function logout(){S.sid=null;S.user=null;S.vms=[];S.screen='login';S.err=null;S.modal=null;S.pending2fa=null;S.searchQuery='';S.filterStatus='all';localStorage.removeItem('portal-sid');render();}
+function logout(){S.sid=null;S.user=null;S.vms=[];S.screen='login';S.err=null;S.modal=null;S.pending2fa=null;S.searchQuery='';S.filterStatus='all';sessionStorage.removeItem('portal-sid');render();}
 
 // NS: Apr 2026 - check if OIDC/LDAP available for portal login
 async function checkAuthProviders(){
@@ -314,6 +314,14 @@ async function loadSnapshots(vm){
     try{const r=await api(`${P}/vm/snapshots?cluster_id=${vm.cluster_id}&vmid=${vm.vmid}`);
     if(r&&r.ok){const d=await r.json();S.modal={type:'snapshots',vm,snapshots:d.snapshots||[],max:d.max||5};render();}
     }catch(e){toast('Error','error');}
+}
+
+// LW: ISO mount for portal customers
+async function loadIsos(vm){
+    try{
+        const r=await api(`${P}/vm/isos`);
+        if(r&&r.ok){const d=await r.json();S.modal={type:'isos',vm,isos:d.isos||[]};render();}
+    }catch(e){toast('Error loading ISOs','error');}
 }
 
 async function createSnapshot(vm,name,desc){
@@ -549,11 +557,13 @@ function renderDash(){
         if(on){
             if(al.includes('vm.console'))acts+=`<button class="btn btn-ghost text-xs" onclick="pConsole('${escCid}',${v.vmid})">&#x1f5a5; Console</button>`;
             if(al.includes('vm.stop'))acts+=`<button class="btn btn-danger text-xs" onclick="pAction('${escCid}',${v.vmid},'shutdown','${escName}')">&#x23FB; Shutdown</button>`;
+            if(al.includes('vm.stop'))acts+=`<button class="btn btn-danger text-xs" style="opacity:0.7" onclick="pAction('${escCid}',${v.vmid},'stop','${escName}')">&#x26A0; Force Stop</button>`;
             if(al.includes('vm.start'))acts+=`<button class="btn btn-ghost text-xs" onclick="pAction('${escCid}',${v.vmid},'reboot','${escName}')">&#8635; Reboot</button>`;
         }else{
             if(al.includes('vm.start'))acts+=`<button class="btn btn-accent text-xs" onclick="pAction('${escCid}',${v.vmid},'start','${escName}')">&#x25B6; Start</button>`;
         }
         if(c.allow_snapshots)acts+=`<button class="btn btn-ghost text-xs" onclick="pSnaps('${escCid}',${v.vmid})">&#x1f4f8; Snapshots</button>`;
+        if(c.allow_iso_mount&&v.type==='qemu')acts+=`<button class="btn btn-ghost text-xs" onclick="pIso('${escCid}',${v.vmid})">&#x1f4bf; ISO</button>`;
 
         return`<div class="card ${on?'card-running':''}" style="padding:16px">
             <div class="vm-header">
@@ -596,7 +606,41 @@ function renderModal(){
     if(S.modal.type==='snapshots')return renderSnapshotsModal();
     if(S.modal.type==='password')return renderPasswordModal();
     if(S.modal.type==='2fa-setup')return render2FAModal();
+    if(S.modal.type==='isos')return renderIsoModal();
     return'';
+}
+
+function renderIsoModal(){
+    const m=S.modal;
+    const vm=m.vm;
+    const isos=m.isos||[];
+    const escCid=esc(vm.cluster_id);
+    return`<div class="modal-backdrop" onclick="S.modal=null;render()">
+    <div class="card modal-card" onclick="event.stopPropagation()" style="max-width:500px;width:100%">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold">&#x1f4bf; Mount ISO — ${esc(vm.name)}</h2>
+            <button class="btn btn-ghost text-xs" onclick="S.modal=null;render()">&times;</button>
+        </div>
+        ${isos.length===0?`<div style="text-align:center;padding:24px;color:var(--muted)">
+            <p>No ISOs available</p>
+            <p class="text-xs mt-2" style="color:var(--muted)">Ask your administrator to configure allowed ISOs</p>
+        </div>`:`
+        <div style="max-height:300px;overflow-y:auto" class="space-y-2">
+            ${isos.map(iso=>`
+                <div class="flex items-center justify-between p-3 rounded-lg" style="background:var(--surface)">
+                    <div>
+                        <div class="text-sm font-medium">${esc(iso.name)}</div>
+                        <div class="text-xs" style="color:var(--muted)">${iso.size>0?`${(iso.size/1048576).toFixed(0)} MB`:'—'}</div>
+                    </div>
+                    <button class="btn btn-accent text-xs" onclick="pMountIso('${escCid}',${vm.vmid},'${esc(iso.volid)}')">Mount</button>
+                </div>
+            `).join('')}
+        </div>
+        <div class="mt-3 pt-3" style="border-top:1px solid var(--border)">
+            <button class="btn btn-ghost text-xs w-full" style="justify-content:center" onclick="pUnmountIso('${escCid}',${vm.vmid})">Eject / Unmount CD-ROM</button>
+        </div>
+        `}
+    </div></div>`;
 }
 
 function renderConsoleModal(){
@@ -623,7 +667,7 @@ function renderConsoleModal(){
             <div id="vnc-wrap" style="height:calc(100% - 40px);position:relative;border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;overflow:hidden;background:#000">
                 <div id="vnc-overlay" class="vnc-overlay"><div class="vnc-spinner"></div><span class="text-sm">Connecting to console...</span></div>
                 <div id="vnc-container" style="width:100%;height:100%"
-                     data-ws-url="${wsUrl}" data-password="${esc(m.ticket||'')}"></div>
+                     data-ws-url="${wsUrl}" data-vt="1"></div>
             </div>
         </div>
     </div>`;
@@ -758,7 +802,8 @@ function bind(){
 
 async function initVNC(container){
     const wsUrl=container.dataset.wsUrl;
-    const password=container.dataset.password;
+    // MK: security audit — read ticket from JS state, not DOM attribute (prevents DOM-based XSS exfil)
+    const password=S.modal?.ticket||'';
     const overlay=document.getElementById('vnc-overlay');
     if(!window.RFB){
         try{
@@ -786,12 +831,22 @@ async function initVNC(container){
 
 // global handlers for onclick attrs
 window.pAction=function(c,v,a,n){
-    const destructive = (a === 'shutdown' || a === 'reboot');
-    const msg = `${a.charAt(0).toUpperCase()+a.slice(1)} "${n}"?`;
-    showConfirm(msg, () => { const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)vmAction(vm,a); }, destructive);
+    const destructive = (a === 'shutdown' || a === 'reboot' || a === 'stop');
+    const label = a === 'stop' ? 'Force Stop' : a.charAt(0).toUpperCase()+a.slice(1);
+    const extra = a === 'stop' ? '\n\nThis immediately kills the VM — unsaved data WILL be lost!' : '';
+    showConfirm(`${label} "${n}"?${extra}`, () => { const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)vmAction(vm,a); }, destructive);
 };
 window.pConsole=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)openConsole(vm);};
 window.pSnaps=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)loadSnapshots(vm);};
+window.pIso=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)loadIsos(vm);};
+window.pMountIso=async function(c,v,iso){
+    const r=await api(`${P}/vm/iso-mount`,{method:'POST',body:{cluster_id:c,vmid:v,iso:iso}});
+    if(r&&r.ok){const d=await r.json();if(d.success){toast('ISO mounted','success');const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)loadIsos(vm);}else toast(d.error||'Mount failed','error');}
+};
+window.pUnmountIso=async function(c,v){
+    const r=await api(`${P}/vm/iso-unmount`,{method:'POST',body:{cluster_id:c,vmid:v}});
+    if(r&&r.ok){const d=await r.json();if(d.success){toast('ISO unmounted','success');const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)loadIsos(vm);}else toast(d.error||'Failed','error');}
+};
 window.pCreateSnap=function(c,v){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);const n=document.getElementById('snap-name')?.value||'';if(vm)createSnapshot(vm,n,'');};
 window.pRollback=function(c,v,snapname){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)rollbackSnapshot(vm,snapname);};
 window.pDeleteSnap=function(c,v,snapname){const vm=S.vms.find(x=>x.cluster_id===c&&x.vmid===v);if(vm)deleteSnapshot(vm,snapname);};

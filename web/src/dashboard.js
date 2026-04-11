@@ -2272,7 +2272,18 @@
             const [showVmwareMigrate, setShowVmwareMigrate] = useState(false);
             const [vmwareMigrationPlan, setVmwareMigrationPlan] = useState(null);
             const [vmwareMigrations, setVmwareMigrations] = useState([]);
-            const [vmwareMigrateForm, setVmwareMigrateForm] = useState({target_cluster:'',target_node:'',target_storage:'',esxi_password:'',network_bridge:'vmbr0',start_after:true,remove_source:false,transfer_mode:'auto',bios:'auto',preserve_mac:true});
+            const [vmwareMigrateForm, setVmwareMigrateForm] = useState({
+                target_cluster:'',target_node:'',target_storage:'',esxi_password:'',network_bridge:'vmbr0',
+                start_after:true,remove_source:false,transfer_mode:'auto',bios:'auto',preserve_mac:true,
+                // hardware overrides (#222)
+                ostype:'auto',scsihw:'auto',disk_bus:'auto',vga:'vmware',net_driver:'auto',
+                sockets:0,cores_per_socket:0,memory:0,cpu_type:'host',
+                // advanced
+                disk_format:'raw',disk_cache:'none',disk_iothread:true,disk_discard:'on',disk_ssd:false,
+                secure_boot:null,tpm_enabled:null,tpm_version:'v2.0',numa:false,
+                hotplug:'disk,network',agent:true,balloon:0,onboot:false,protection:false,tags:'',description:'',
+            });
+            const [migrateWizardStep, setMigrateWizardStep] = useState('target'); // target, hardware, advanced
             const [vmwareMigrateLoading, setVmwareMigrateLoading] = useState(false);
             const [vmwareConsoleUrl, setVmwareConsoleUrl] = useState(null);
             const [showVmwareConsole, setShowVmwareConsole] = useState(false);
@@ -8858,115 +8869,132 @@
                                                         ? 'bg-proxmox-card border border-proxmox-border p-4 space-y-4'
                                                         : 'bg-proxmox-card border border-proxmox-border rounded-xl p-6 space-y-4'
                                                     }>
-                                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                                            <div>
-                                                                <h3 className="text-lg font-semibold text-white">{t('syslog') || 'Log Events'}</h3>
-                                                                <p className="text-sm text-gray-400 mt-1">
-                                                                    Integrated syslog events with filtering, search, sorting and 50-row pages
-                                                                </p>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => fetchLogEvents({ page: logEventsPage })}
-                                                                className="self-start p-2 rounded-lg bg-proxmox-dark border border-proxmox-border text-gray-400 hover:text-white"
-                                                                title="Refresh"
-                                                            >
-                                                                <Icons.RotateCw className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-                                                            <div className="xl:col-span-2">
-                                                                <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
-                                                                <div className="relative">
-                                                                    <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
-                                                                    <input
-                                                                        type="text"
-                                                                        value={logEventFilters.search}
-                                                                        onChange={(e) => setLogEventFilters(prev => ({ ...prev, search: e.target.value }))}
-                                                                        onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
-                                                                        placeholder="Message, host, IP, protocol"
-                                                                        className="w-full rounded-lg bg-proxmox-dark border border-proxmox-border pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-proxmox-orange"
-                                                                    />
+                                                        {/* LW: Apr 2026 — syslog header with severity summary */}
+                                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
+                                                                    <Icons.Terminal className="w-5 h-5 text-emerald-400" />
+                                                                </div>
+                                                                <div>
+                                                                    <h3 className="text-lg font-semibold text-white">{t('syslog') || 'Syslog Viewer'}</h3>
+                                                                    <p className="text-xs text-gray-500">
+                                                                        {logEventsTotal > 0 ? `${logEventsTotal} events` : 'No events'} · UDP/TCP on port 1514
+                                                                    </p>
                                                                 </div>
                                                             </div>
-                                                            <div>
-                                                                <label className="block text-xs font-medium text-gray-500 mb-1">Severity</label>
-                                                                <select
-                                                                    value={logEventFilters.severity}
-                                                                    onChange={(e) => setLogEventFilters(prev => ({ ...prev, severity: e.target.value }))}
-                                                                    className="w-full rounded-lg bg-proxmox-dark border border-proxmox-border px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-proxmox-orange"
+                                                            <div className="flex items-center gap-2">
+                                                                {/* severity quick stats */}
+                                                                {logEvents.length > 0 && (() => {
+                                                                    const counts = {};
+                                                                    logEvents.forEach(e => { const s = (e.severity_text||'').toLowerCase(); counts[s] = (counts[s]||0)+1; });
+                                                                    return (
+                                                                        <div className="flex gap-1.5">
+                                                                            {counts.error || counts.critical || counts.emergency || counts.alert ? (
+                                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20">
+                                                                                    {(counts.error||0)+(counts.critical||0)+(counts.emergency||0)+(counts.alert||0)} errors
+                                                                                </span>
+                                                                            ) : null}
+                                                                            {counts.warning ? (
+                                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
+                                                                                    {counts.warning} warn
+                                                                                </span>
+                                                                            ) : null}
+                                                                            {counts.info || counts.notice || counts.debug ? (
+                                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400/70 border border-blue-500/15">
+                                                                                    {(counts.info||0)+(counts.notice||0)+(counts.debug||0)} info
+                                                                                </span>
+                                                                            ) : null}
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (!logEvents || !logEvents.length) return;
+                                                                        const facNames = ['kern','user','mail','daemon','auth','syslog','lpr','news','uucp','cron','authpriv','ftp','ntp','audit','alert','clock','local0','local1','local2','local3','local4','local5','local6','local7'];
+                                                                        generatePegaProxPDF({
+                                                                            title: 'Syslog Report',
+                                                                            subtitle: `${logEventsTotal} events`,
+                                                                            clusterName: selectedCluster?.name,
+                                                                            filename: `pegaprox-syslog-${new Date().toISOString().slice(0,10)}.pdf`,
+                                                                            content: [
+                                                                                { type: 'stats', data: [
+                                                                                    { label: 'Total', value: String(logEventsTotal || logEvents.length), color: '#3b82f6' },
+                                                                                    { label: 'Errors', value: String(logEvents.filter(e => ['emergency','alert','critical','error'].includes((e.severity_text||'').toLowerCase())).length), color: '#ef4444' },
+                                                                                    { label: 'Warnings', value: String(logEvents.filter(e => (e.severity_text||'').toLowerCase() === 'warning').length), color: '#eab308' },
+                                                                                ]},
+                                                                                { type: 'table', title: 'Log Events', columns: ['Time', 'Severity', 'Host', 'Source IP', 'Facility', 'Message'],
+                                                                                    rows: logEvents.slice(0, 200).map(e => [
+                                                                                        e.timestamp ? new Date(e.timestamp).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '-',
+                                                                                        e.severity_text || '-',
+                                                                                        e.hostname || '-',
+                                                                                        e.source_ip || '-',
+                                                                                        e.facility != null && facNames[e.facility] ? facNames[e.facility] : String(e.facility ?? '-'),
+                                                                                        (e.message || '-').substring(0, 120),
+                                                                                    ])
+                                                                                },
+                                                                            ]
+                                                                        });
+                                                                    }}
+                                                                    className="px-2.5 py-1.5 rounded-lg bg-proxmox-dark border border-proxmox-border text-gray-400 hover:text-white hover:border-gray-500 transition-colors text-xs"
+                                                                    title="Export as PDF"
                                                                 >
-                                                                    <option value="">All severities</option>
-                                                                    {logEventsSeverities.map((sev) => (
-                                                                        <option key={sev.value} value={sev.value}>{sev.label}</option>
-                                                                    ))}
-                                                                </select>
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-medium text-gray-500 mb-1">Protocol</label>
-                                                                <select
-                                                                    value={logEventFilters.protocol}
-                                                                    onChange={(e) => setLogEventFilters(prev => ({ ...prev, protocol: e.target.value }))}
-                                                                    className="w-full rounded-lg bg-proxmox-dark border border-proxmox-border px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-proxmox-orange"
+                                                                    PDF
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => fetchLogEvents({ page: logEventsPage })}
+                                                                    className="p-2 rounded-lg bg-proxmox-dark border border-proxmox-border text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                                                                    title="Refresh"
                                                                 >
-                                                                    <option value="">All protocols</option>
-                                                                    {logEventsProtocols.map((protocol) => (
-                                                                        <option key={protocol} value={protocol}>{protocol}</option>
-                                                                    ))}
-                                                                </select>
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-medium text-gray-500 mb-1">Hostname</label>
-                                                                <input
-                                                                    type="text"
-                                                                    value={logEventFilters.hostname}
-                                                                    onChange={(e) => setLogEventFilters(prev => ({ ...prev, hostname: e.target.value }))}
-                                                                    onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
-                                                                    placeholder="Filter host"
-                                                                    className="w-full rounded-lg bg-proxmox-dark border border-proxmox-border px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-proxmox-orange"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-medium text-gray-500 mb-1">Source IP</label>
-                                                                <input
-                                                                    type="text"
-                                                                    value={logEventFilters.source_ip}
-                                                                    onChange={(e) => setLogEventFilters(prev => ({ ...prev, source_ip: e.target.value }))}
-                                                                    onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
-                                                                    placeholder="Filter IP"
-                                                                    className="w-full rounded-lg bg-proxmox-dark border border-proxmox-border px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-proxmox-orange"
-                                                                />
+                                                                    <Icons.RotateCw className="w-4 h-4" />
+                                                                </button>
                                                             </div>
                                                         </div>
 
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <div>
-                                                                <label className="block text-xs font-medium text-gray-500 mb-1">Facility</label>
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    value={logEventFilters.facility}
-                                                                    onChange={(e) => setLogEventFilters(prev => ({ ...prev, facility: e.target.value }))}
-                                                                    onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
-                                                                    placeholder="e.g. 1"
-                                                                    className="w-28 rounded-lg bg-proxmox-dark border border-proxmox-border px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-proxmox-orange"
-                                                                />
+                                                        {/* LW: compact filter bar */}
+                                                        <div className="flex flex-wrap items-end gap-2">
+                                                            <div className="flex-1 min-w-[180px] max-w-xs">
+                                                                <div className="relative">
+                                                                    <Icons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 w-3.5 h-3.5" />
+                                                                    <input type="text" value={logEventFilters.search}
+                                                                        onChange={(e) => setLogEventFilters(prev => ({ ...prev, search: e.target.value }))}
+                                                                        onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
+                                                                        placeholder="Search messages..."
+                                                                        className="w-full rounded-lg bg-proxmox-dark border border-proxmox-border pl-8 pr-3 py-1.5 text-sm text-white placeholder-gray-600" />
+                                                                </div>
                                                             </div>
-                                                            <button
-                                                                onClick={applyLogEventFilters}
-                                                                className="mt-5 rounded-lg bg-proxmox-orange px-4 py-2 text-sm font-medium text-white hover:bg-proxmox-orange/90"
-                                                            >
+                                                            <select value={logEventFilters.severity} onChange={(e) => setLogEventFilters(prev => ({ ...prev, severity: e.target.value }))}
+                                                                className="rounded-lg bg-proxmox-dark border border-proxmox-border px-2.5 py-1.5 text-sm text-white">
+                                                                <option value="">All severities</option>
+                                                                {logEventsSeverities.map((sev) => (<option key={sev.value} value={sev.value}>{sev.label}</option>))}
+                                                            </select>
+                                                            <select value={logEventFilters.protocol} onChange={(e) => setLogEventFilters(prev => ({ ...prev, protocol: e.target.value }))}
+                                                                className="rounded-lg bg-proxmox-dark border border-proxmox-border px-2.5 py-1.5 text-sm text-white">
+                                                                <option value="">All protocols</option>
+                                                                {logEventsProtocols.map((p) => (<option key={p} value={p}>{p}</option>))}
+                                                            </select>
+                                                            <input type="text" value={logEventFilters.hostname}
+                                                                onChange={(e) => setLogEventFilters(prev => ({ ...prev, hostname: e.target.value }))}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
+                                                                placeholder="Hostname"
+                                                                className="w-28 rounded-lg bg-proxmox-dark border border-proxmox-border px-2.5 py-1.5 text-sm text-white placeholder-gray-600" />
+                                                            <input type="text" value={logEventFilters.source_ip}
+                                                                onChange={(e) => setLogEventFilters(prev => ({ ...prev, source_ip: e.target.value }))}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
+                                                                placeholder="Source IP"
+                                                                className="w-28 rounded-lg bg-proxmox-dark border border-proxmox-border px-2.5 py-1.5 text-sm text-white placeholder-gray-600" />
+                                                            <input type="number" min="0" value={logEventFilters.facility}
+                                                                onChange={(e) => setLogEventFilters(prev => ({ ...prev, facility: e.target.value }))}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter') applyLogEventFilters(); }}
+                                                                placeholder="Fac."
+                                                                className="w-16 rounded-lg bg-proxmox-dark border border-proxmox-border px-2 py-1.5 text-sm text-white placeholder-gray-600" />
+                                                            <button onClick={applyLogEventFilters}
+                                                                className="rounded-lg bg-proxmox-orange px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600 transition-colors">
                                                                 {t('filter') || 'Filter'}
                                                             </button>
-                                                            <button
-                                                                onClick={resetLogEventFilters}
-                                                                className="mt-5 rounded-lg bg-proxmox-dark border border-proxmox-border px-4 py-2 text-sm text-gray-300 hover:text-white"
-                                                            >
+                                                            <button onClick={resetLogEventFilters}
+                                                                className="rounded-lg bg-proxmox-dark border border-proxmox-border px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors">
                                                                 Reset
                                                             </button>
-                                                            <div className="mt-5 text-xs text-gray-500">
-                                                                {logEventsTotal > 0 ? `${logEventsTotal} events found` : 'No events matched'}
-                                                            </div>
                                                         </div>
 
                                                         {logEventsLoading ? (
@@ -9013,31 +9041,36 @@
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody className="divide-y divide-gray-800">
+                                                                            {/* LW: severity-colored rows with dot indicators */}
                                                                             {logEvents.map((event) => {
                                                                                 const sev = (event.severity_text || '').toLowerCase();
-                                                                                const severityClass =
-                                                                                    sev === 'emergency' || sev === 'alert' || sev === 'critical' || sev === 'error'
-                                                                                        ? 'bg-red-500/20 text-red-300'
-                                                                                        : sev === 'warning'
-                                                                                            ? 'bg-yellow-500/20 text-yellow-300'
-                                                                                            : sev === 'notice'
-                                                                                                ? 'bg-blue-500/20 text-blue-300'
-                                                                                                : 'bg-gray-500/20 text-gray-300';
+                                                                                const isError = sev === 'emergency' || sev === 'alert' || sev === 'critical' || sev === 'error';
+                                                                                const isWarn = sev === 'warning';
+                                                                                const isNotice = sev === 'notice';
+                                                                                const dotColor = isError ? 'bg-red-400' : isWarn ? 'bg-yellow-400' : isNotice ? 'bg-blue-400' : 'bg-gray-500';
+                                                                                const badgeBg = isError ? 'bg-red-500/15 text-red-300 border-red-500/25' : isWarn ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25' : isNotice ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+                                                                                const rowBg = isError ? 'bg-red-500/[0.03]' : isWarn ? 'bg-yellow-500/[0.02]' : '';
+                                                                                // facility names
+                                                                                const facNames = ['kern','user','mail','daemon','auth','syslog','lpr','news','uucp','cron','authpriv','ftp','ntp','audit','alert','clock','local0','local1','local2','local3','local4','local5','local6','local7'];
+                                                                                const facLabel = event.facility != null && facNames[event.facility] ? `${facNames[event.facility]} (${event.facility})` : event.facility ?? '-';
                                                                                 return (
-                                                                                    <tr key={event.id} className="hover:bg-white/5 transition-colors align-top">
-                                                                                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                                                                                            {event.timestamp ? new Date(event.timestamp).toLocaleString() : '-'}
+                                                                                    <tr key={event.id} className={`hover:bg-white/5 transition-colors align-top ${rowBg}`}>
+                                                                                        <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap text-xs font-mono">
+                                                                                            {event.timestamp ? new Date(event.timestamp).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '-'}
                                                                                         </td>
-                                                                                        <td className="px-4 py-3">
-                                                                                            <span className={`inline-flex items-center rounded px-2 py-1 text-xs font-medium ${severityClass}`}>
+                                                                                        <td className="px-3 py-2.5">
+                                                                                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium border ${badgeBg}`}>
+                                                                                                <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
                                                                                                 {event.severity_text || event.severity || '-'}
                                                                                             </span>
                                                                                         </td>
-                                                                                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{event.protocol || '-'}</td>
-                                                                                        <td className="px-4 py-3 text-gray-200 whitespace-nowrap">{event.hostname || '-'}</td>
-                                                                                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{event.source_ip || '-'}</td>
-                                                                                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{event.facility ?? '-'}</td>
-                                                                                        <td className="px-4 py-3 text-gray-200 min-w-[24rem] whitespace-pre-wrap break-words">{event.message || '-'}</td>
+                                                                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                                                                            <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${event.protocol === 'TCP' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-purple-500/10 text-purple-400'}`}>{event.protocol || '-'}</span>
+                                                                                        </td>
+                                                                                        <td className="px-3 py-2.5 text-gray-200 whitespace-nowrap text-sm">{event.hostname || '-'}</td>
+                                                                                        <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs font-mono">{event.source_ip || '-'}</td>
+                                                                                        <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap text-xs">{facLabel}</td>
+                                                                                        <td className="px-3 py-2.5 text-gray-200 min-w-[20rem] text-sm whitespace-pre-wrap break-words leading-relaxed">{event.message || '-'}</td>
                                                                                     </tr>
                                                                                 );
                                                                             })}
@@ -12700,10 +12733,21 @@
                                                 {/* Migration Wizard Modal */}
                                                 {showVmwareMigrate && vmwareMigrationPlan && (
                                                     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowVmwareMigrate(false)}>
-                                                        <div className="bg-proxmox-card border border-emerald-500/30 rounded-2xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                                        <div className="bg-proxmox-card border border-emerald-500/30 rounded-2xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                                                             <h3 className="text-lg font-bold text-white mb-1">Migrate to Proxmox</h3>
-                                                            <p className="text-xs text-gray-500 mb-4">Method: {vmwareMigrationPlan.method || 'HTTPS + Delta Sync'}</p>
+                                                            <p className="text-xs text-gray-500 mb-3">Method: {vmwareMigrationPlan.method || 'HTTPS + Delta Sync'}</p>
+
+                                                            {/* LW: 3-step wizard tabs */}
+                                                            <div className="flex gap-1 mb-4 border-b border-proxmox-border pb-2">
+                                                                {[{id:'target',label:'Target',icon:'🎯'},{id:'hardware',label:'Hardware',icon:'🔧'},{id:'advanced',label:'Advanced',icon:'⚙️'}].map(tab => (
+                                                                    <button key={tab.id} onClick={() => setMigrateWizardStep(tab.id)}
+                                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${migrateWizardStep === tab.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
+                                                                    >{tab.icon} {tab.label}</button>
+                                                                ))}
+                                                            </div>
                                                             
+                                                            {/* === STEP 1: TARGET === */}
+                                                            {migrateWizardStep === 'target' && (
                                                             <div className="space-y-3">
                                                                 {/* Target Cluster */}
                                                                 <div>
@@ -12827,6 +12871,223 @@
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                            )}
+
+                                                            {/* === STEP 2: HARDWARE === */}
+                                                            {migrateWizardStep === 'hardware' && (
+                                                            <div className="space-y-3">
+                                                                <p className="text-xs text-gray-500 mb-2">Auto-detected from ESXi. Override if needed.</p>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">BIOS / Firmware</label>
+                                                                        <select value={vmwareMigrateForm.bios} onChange={e => setVmwareMigrateForm(f => ({...f, bios: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="auto">Auto ({vmwareMigrationPlan.source?.hardware?.firmware || 'bios'})</option>
+                                                                            <option value="seabios">SeaBIOS (Legacy)</option>
+                                                                            <option value="ovmf">OVMF (UEFI)</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">OS Type</label>
+                                                                        <select value={vmwareMigrateForm.ostype} onChange={e => setVmwareMigrateForm(f => ({...f, ostype: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="auto">Auto ({vmwareMigrationPlan.source?.guest_OS || 'detect'})</option>
+                                                                            <option value="l26">Linux (2.6-6.x)</option>
+                                                                            <option value="win11">Windows 11/Server 2022+</option>
+                                                                            <option value="win10">Windows 10/Server 2016-2019</option>
+                                                                            <option value="win8">Windows 8/Server 2012</option>
+                                                                            <option value="win7">Windows 7/Server 2008 R2</option>
+                                                                            <option value="other">Other</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">SCSI Controller</label>
+                                                                        <select value={vmwareMigrateForm.scsihw} onChange={e => setVmwareMigrateForm(f => ({...f, scsihw: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="auto">Auto ({vmwareMigrationPlan.source?.hardware?.scsi_controller || 'detect'})</option>
+                                                                            <option value="virtio-scsi-single">VirtIO SCSI Single (recommended)</option>
+                                                                            <option value="virtio-scsi-pci">VirtIO SCSI</option>
+                                                                            <option value="lsi">LSI 53C895A</option>
+                                                                            <option value="pvscsi">VMware PVSCSI</option>
+                                                                            <option value="megasas">MegaRAID SAS</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">Disk Bus</label>
+                                                                        <select value={vmwareMigrateForm.disk_bus} onChange={e => setVmwareMigrateForm(f => ({...f, disk_bus: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="auto">Auto ({vmwareMigrationPlan.source?.hardware?.disk_bus || 'scsi'})</option>
+                                                                            <option value="scsi">SCSI</option>
+                                                                            <option value="sata">SATA</option>
+                                                                            <option value="ide">IDE</option>
+                                                                            <option value="virtio">VirtIO Block</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">VGA Display</label>
+                                                                        <select value={vmwareMigrateForm.vga} onChange={e => setVmwareMigrateForm(f => ({...f, vga: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="vmware">VMware SVGA (recommended)</option>
+                                                                            <option value="std">Standard VGA</option>
+                                                                            <option value="virtio">VirtIO GPU</option>
+                                                                            <option value="qxl">QXL (SPICE)</option>
+                                                                            <option value="none">None (headless)</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">Network Model</label>
+                                                                        <select value={vmwareMigrateForm.net_driver} onChange={e => setVmwareMigrateForm(f => ({...f, net_driver: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="auto">Auto ({vmwareMigrationPlan.source?.hardware?.nic_type || 'detect'})</option>
+                                                                            <option value="e1000">Intel E1000</option>
+                                                                            <option value="e1000e">Intel E1000e</option>
+                                                                            <option value="virtio">VirtIO (best perf)</option>
+                                                                            <option value="vmxnet3">VMware vmxnet3</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">CPU Sockets</label>
+                                                                        <input type="number" min="1" max="8" value={vmwareMigrateForm.sockets || vmwareMigrationPlan.source?.cpu?.sockets || 1}
+                                                                            onChange={e => setVmwareMigrateForm(f => ({...f, sockets: parseInt(e.target.value)||1}))}
+                                                                            className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">Cores per Socket</label>
+                                                                        <input type="number" min="1" max="128" value={vmwareMigrateForm.cores_per_socket || vmwareMigrationPlan.source?.cpu?.cores_per_socket || 1}
+                                                                            onChange={e => setVmwareMigrateForm(f => ({...f, cores_per_socket: parseInt(e.target.value)||1}))}
+                                                                            className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">Memory (MB)</label>
+                                                                        <input type="number" min="128" value={vmwareMigrateForm.memory || vmwareMigrationPlan.source?.memory?.size_MiB || 2048}
+                                                                            onChange={e => setVmwareMigrateForm(f => ({...f, memory: parseInt(e.target.value)||2048}))}
+                                                                            className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs text-gray-500 mb-1 block">CPU Type</label>
+                                                                        <select value={vmwareMigrateForm.cpu_type} onChange={e => setVmwareMigrateForm(f => ({...f, cpu_type: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded-lg px-3 py-2 text-sm text-white">
+                                                                            <option value="host">host (match physical CPU)</option>
+                                                                            <option value="kvm64">kvm64 (safe default)</option>
+                                                                            <option value="x86-64-v2-AES">x86-64-v2-AES</option>
+                                                                            <option value="x86-64-v3">x86-64-v3</option>
+                                                                        </select>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            )}
+
+                                                            {/* === STEP 3: ADVANCED === */}
+                                                            {migrateWizardStep === 'advanced' && (
+                                                            <div className="space-y-3">
+                                                                <p className="text-xs text-gray-500 mb-2">Fine-tune disk, security, and runtime options.</p>
+
+                                                                {/* Disk Options */}
+                                                                <details className="group">
+                                                                    <summary className="text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-300 list-none flex items-center gap-1">
+                                                                        <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                                                                        💾 Disk Options
+                                                                    </summary>
+                                                                    <div className="grid grid-cols-2 gap-3 mt-2 ml-4">
+                                                                        <div>
+                                                                            <label className="text-xs text-gray-500 mb-1 block">Format</label>
+                                                                            <select value={vmwareMigrateForm.disk_format} onChange={e => setVmwareMigrateForm(f => ({...f, disk_format: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded px-2 py-1.5 text-xs text-white">
+                                                                                <option value="raw">raw (best perf)</option>
+                                                                                <option value="qcow2">qcow2 (snapshots)</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="text-xs text-gray-500 mb-1 block">Cache</label>
+                                                                            <select value={vmwareMigrateForm.disk_cache} onChange={e => setVmwareMigrateForm(f => ({...f, disk_cache: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded px-2 py-1.5 text-xs text-white">
+                                                                                <option value="none">none (recommended)</option>
+                                                                                <option value="writethrough">writethrough</option>
+                                                                                <option value="writeback">writeback</option>
+                                                                                <option value="directsync">directsync</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.disk_iothread} onChange={e => setVmwareMigrateForm(f => ({...f, disk_iothread: e.target.checked}))} className="rounded" />
+                                                                            IO Thread (per-disk)
+                                                                        </label>
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.disk_ssd} onChange={e => setVmwareMigrateForm(f => ({...f, disk_ssd: e.target.checked}))} className="rounded" />
+                                                                            SSD Emulation
+                                                                        </label>
+                                                                        <div>
+                                                                            <label className="text-xs text-gray-500 mb-1 block">Discard (TRIM)</label>
+                                                                            <select value={vmwareMigrateForm.disk_discard} onChange={e => setVmwareMigrateForm(f => ({...f, disk_discard: e.target.value}))} className="w-full bg-proxmox-dark border border-proxmox-border rounded px-2 py-1.5 text-xs text-white">
+                                                                                <option value="on">on</option>
+                                                                                <option value="ignore">ignore</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    </div>
+                                                                </details>
+
+                                                                {/* Security */}
+                                                                <details className="group">
+                                                                    <summary className="text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-300 list-none flex items-center gap-1">
+                                                                        <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                                                                        🔒 Security
+                                                                    </summary>
+                                                                    <div className="grid grid-cols-2 gap-3 mt-2 ml-4">
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.secure_boot ?? (vmwareMigrationPlan.source?.hardware?.secure_boot || false)} onChange={e => setVmwareMigrateForm(f => ({...f, secure_boot: e.target.checked}))} className="rounded" />
+                                                                            EFI Secure Boot {vmwareMigrationPlan.source?.hardware?.secure_boot ? '(detected)' : ''}
+                                                                        </label>
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.tpm_enabled ?? (vmwareMigrationPlan.source?.hardware?.has_tpm || false)} onChange={e => setVmwareMigrateForm(f => ({...f, tpm_enabled: e.target.checked}))} className="rounded" />
+                                                                            TPM {vmwareMigrationPlan.source?.hardware?.has_tpm ? '(detected)' : ''}
+                                                                        </label>
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.protection} onChange={e => setVmwareMigrateForm(f => ({...f, protection: e.target.checked}))} className="rounded" />
+                                                                            Delete Protection
+                                                                        </label>
+                                                                    </div>
+                                                                </details>
+
+                                                                {/* Runtime */}
+                                                                <details className="group">
+                                                                    <summary className="text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-300 list-none flex items-center gap-1">
+                                                                        <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                                                                        ⚡ Runtime
+                                                                    </summary>
+                                                                    <div className="grid grid-cols-2 gap-3 mt-2 ml-4">
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.numa} onChange={e => setVmwareMigrateForm(f => ({...f, numa: e.target.checked}))} className="rounded" />
+                                                                            NUMA
+                                                                        </label>
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.agent} onChange={e => setVmwareMigrateForm(f => ({...f, agent: e.target.checked}))} className="rounded" />
+                                                                            QEMU Guest Agent
+                                                                        </label>
+                                                                        <label className="flex items-center gap-2 text-xs text-gray-400">
+                                                                            <input type="checkbox" checked={vmwareMigrateForm.onboot} onChange={e => setVmwareMigrateForm(f => ({...f, onboot: e.target.checked}))} className="rounded" />
+                                                                            Start on Boot
+                                                                        </label>
+                                                                        <div>
+                                                                            <label className="text-xs text-gray-500 mb-1 block">Memory Balloon (MB, 0=off)</label>
+                                                                            <input type="number" min="0" value={vmwareMigrateForm.balloon}
+                                                                                onChange={e => setVmwareMigrateForm(f => ({...f, balloon: parseInt(e.target.value)||0}))}
+                                                                                className="w-full bg-proxmox-dark border border-proxmox-border rounded px-2 py-1.5 text-xs text-white" />
+                                                                        </div>
+                                                                    </div>
+                                                                </details>
+
+                                                                {/* Metadata */}
+                                                                <details className="group">
+                                                                    <summary className="text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-300 list-none flex items-center gap-1">
+                                                                        <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                                                                        🏷️ Metadata
+                                                                    </summary>
+                                                                    <div className="space-y-2 mt-2 ml-4">
+                                                                        <div>
+                                                                            <label className="text-xs text-gray-500 mb-1 block">Tags</label>
+                                                                            <input type="text" value={vmwareMigrateForm.tags} onChange={e => setVmwareMigrateForm(f => ({...f, tags: e.target.value}))}
+                                                                                placeholder="e.g. migrated;production"
+                                                                                className="w-full bg-proxmox-dark border border-proxmox-border rounded px-2 py-1.5 text-xs text-white" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="text-xs text-gray-500 mb-1 block">Description</label>
+                                                                            <textarea value={vmwareMigrateForm.description || vmwareMigrationPlan.source?.notes || ''} onChange={e => setVmwareMigrateForm(f => ({...f, description: e.target.value}))}
+                                                                                rows="2" className="w-full bg-proxmox-dark border border-proxmox-border rounded px-2 py-1.5 text-xs text-white resize-none" />
+                                                                        </div>
+                                                                    </div>
+                                                                </details>
+                                                            </div>
+                                                            )}
                                                             
                                                             <div className="flex gap-2 justify-end mt-4">
                                                                 <button onClick={() => setShowVmwareMigrate(false)} className="px-4 py-2 rounded-lg bg-proxmox-dark text-gray-400 text-sm">Cancel</button>

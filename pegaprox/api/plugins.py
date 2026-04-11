@@ -141,6 +141,11 @@ def load_plugin(app, plugin_id):
             pass
     if not is_trusted:
         logging.warning(f"[PLUGINS] [SECURITY] Loading UNTRUSTED plugin '{plugin_id}' — not authored by PegaProx Team. Review code before use!")
+    # MK: Apr 2026 — security audit: plugins run with FULL process privileges, no sandbox
+    # this is by design (like Grafana/Jenkins plugins) but must be documented
+    from pegaprox.utils.audit import log_audit
+    try: log_audit('system', 'plugin.load', f"Plugin '{plugin_id}' loaded (trusted={is_trusted})")
+    except: pass
 
     try:
         mod_name = f'plugins.{plugin_id}'

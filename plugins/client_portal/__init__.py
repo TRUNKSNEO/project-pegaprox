@@ -474,6 +474,134 @@ def _change_password():
     return {'success': True}
 
 
+# LW: Apr 2026 — ISO mount for portal customers
+# hoster defines allowed ISOs in config.json: "allowed_isos": ["local:iso/debian.iso", ...]
+# or "iso_storage": "local" to allow all ISOs from a specific storage
+
+def _list_allowed_isos():
+    """List ISOs that portal customers are allowed to mount"""
+    username = request.session.get('user', '')
+    if not username:
+        return {'error': 'Not authenticated'}, 401
+    cfg = _load_config()
+
+    # hoster can specify individual ISOs or an entire storage
+    allowed_list = cfg.get('allowed_isos', [])
+    iso_storage = cfg.get('iso_storage', '')
+
+    isos = []
+    if iso_storage:
+        # list all ISOs from the configured storage across all clusters
+        for cid, mgr in cluster_managers.items():
+            if not mgr.is_connected:
+                continue
+            try:
+                for iso in mgr.get_iso_list(list(mgr.get_node_status().keys())[0], iso_storage):
+                    volid = iso.get('volid', '')
+                    name = volid.split('/')[-1] if '/' in volid else volid
+                    if volid not in [i['volid'] for i in isos]:
+                        isos.append({'volid': volid, 'name': name, 'size': iso.get('size', 0), 'cluster_id': cid})
+            except:
+                pass
+    # also add individually allowed ISOs
+    for iso_id in allowed_list:
+        if iso_id not in [i['volid'] for i in isos]:
+            name = iso_id.split('/')[-1] if '/' in iso_id else iso_id
+            isos.append({'volid': iso_id, 'name': name, 'size': 0, 'cluster_id': ''})
+
+    return {'isos': isos}
+
+
+def _mount_iso():
+    """Mount an allowed ISO to a customer's VM"""
+    username = request.session.get('user', '')
+    if not username:
+        return {'error': 'Not authenticated'}, 401
+    data = request.get_json() or {}
+    cluster_id = data.get('cluster_id', '')
+    vmid = data.get('vmid')
+    iso_volid = data.get('iso', '')
+    drive = data.get('drive', 'ide2')  # ide2 is standard CD-ROM
+
+    if not all([cluster_id, vmid, iso_volid]):
+        return {'error': 'cluster_id, vmid, iso required'}, 400
+
+    # check VM access
+    if not user_can_access_vm(username, cluster_id, vmid):
+        return {'error': 'Access denied'}, 403
+
+    # MK: security audit — verify ISO is in explicit allowed list or allowed storage
+    cfg = _load_config()
+    allowed = cfg.get('allowed_isos', [])
+    iso_storage = cfg.get('iso_storage', '')
+    # prevent path traversal in volid
+    if '..' in iso_volid or '/' in iso_volid.split(':')[-1].split('/')[0]:
+        return {'error': 'Invalid ISO path'}, 400
+    if iso_volid not in allowed and not (iso_storage and iso_volid.startswith(f'{iso_storage}:iso/')):
+        return {'error': 'This ISO is not allowed'}, 403
+
+    mgr = cluster_managers.get(cluster_id)
+    if not mgr or not mgr.is_connected:
+        return {'error': 'Cluster not available'}, 503
+
+    # find node
+    try:
+        vms = mgr.get_vm_resources()
+        vm = next((v for v in vms if v.get('vmid') == int(vmid)), None)
+        if not vm:
+            return {'error': 'VM not found'}, 404
+        node = vm.get('node')
+        vm_type = vm.get('type', 'qemu')
+        if vm_type != 'qemu':
+            return {'error': 'ISO mount only supported for QEMU VMs'}, 400
+
+        url = f"https://{mgr.host}:8006/api2/json/nodes/{node}/qemu/{vmid}/config"
+        resp = mgr._api_post(url, data={drive: f'{iso_volid},media=cdrom'})
+        if resp.status_code == 200:
+            from pegaprox.utils.audit import log_audit
+            log_audit(username, 'portal.iso_mount', f'Mounted {iso_volid} on VM {vmid}')
+            return {'success': True, 'message': f'ISO mounted on {drive}'}
+        return {'error': f'Mount failed: {resp.text[:200]}'}, 500
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
+def _unmount_iso():
+    """Remove ISO from VM CD-ROM drive"""
+    username = request.session.get('user', '')
+    if not username:
+        return {'error': 'Not authenticated'}, 401
+    data = request.get_json() or {}
+    cluster_id = data.get('cluster_id', '')
+    vmid = data.get('vmid')
+    drive = data.get('drive', 'ide2')
+
+    if not all([cluster_id, vmid]):
+        return {'error': 'cluster_id, vmid required'}, 400
+    if not user_can_access_vm(username, cluster_id, vmid):
+        return {'error': 'Access denied'}, 403
+
+    mgr = cluster_managers.get(cluster_id)
+    if not mgr or not mgr.is_connected:
+        return {'error': 'Cluster not available'}, 503
+
+    try:
+        vms = mgr.get_vm_resources()
+        vm = next((v for v in vms if v.get('vmid') == int(vmid)), None)
+        if not vm:
+            return {'error': 'VM not found'}, 404
+        node = vm.get('node')
+        url = f"https://{mgr.host}:8006/api2/json/nodes/{node}/qemu/{vmid}/config"
+        resp = mgr._api_post(url, data={drive: 'none,media=cdrom'})
+        if resp.status_code == 200:
+            from pegaprox.utils.audit import log_audit
+            log_audit(username, 'portal.iso_unmount', f'Unmounted ISO from VM {vmid}')
+            return {'success': True}
+        return {'error': f'Unmount failed: {resp.text[:200]}'}, 500
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 def register(app):
     """Register plugin routes"""
     register_plugin_route('client_portal', 'config', _get_portal_config)
@@ -484,5 +612,9 @@ def register(app):
     register_plugin_route('client_portal', 'vm/snapshot-rollback', _vm_snapshot_rollback)
     register_plugin_route('client_portal', 'vm/snapshot-delete', _vm_snapshot_delete)
     register_plugin_route('client_portal', 'account/change-password', _change_password)
+    # ISO mount for portal customers
+    register_plugin_route('client_portal', 'vm/isos', _list_allowed_isos)
+    register_plugin_route('client_portal', 'vm/iso-mount', _mount_iso)
+    register_plugin_route('client_portal', 'vm/iso-unmount', _unmount_iso)
 
     logging.info("[PLUGINS] Client Portal plugin registered")

@@ -56,17 +56,35 @@ _XCP_NIC_TO_PVE = {
 }
 
 # NS: Mar 2026 - ESXi guest OS -> Proxmox ostype
+# MK: Apr 2026 — comprehensive ESXi guestId → PVE ostype mapping (#222)
+# verified against VMware GuestOsIdentifier enum + PVE ostype list
 _ESXI_TO_PVE_OSTYPE = {
+    # Linux — all modern kernels
     'ubuntu64Guest': 'l26', 'ubuntu32Guest': 'l26',
-    'debian10_64Guest': 'l26', 'debian11_64Guest': 'l26', 'debian12_64Guest': 'l26',
+    'debian10_64Guest': 'l26', 'debian11_64Guest': 'l26', 'debian12_64Guest': 'l26', 'debian13_64Guest': 'l26',
     'centos7_64Guest': 'l26', 'centos8_64Guest': 'l26', 'centos9_64Guest': 'l26',
-    'rhel7_64Guest': 'l26', 'rhel8_64Guest': 'l26', 'rhel9_64Guest': 'l26',
-    'fedora64Guest': 'l26', 'sles15_64Guest': 'l26',
-    'windows9_64Guest': 'win10', 'windows9Guest': 'win10',
-    'windows2019srv_64Guest': 'w2k19', 'windows2019srvNext_64Guest': 'w2k22',
-    'windows2022srvNext_64Guest': 'w2k22',
+    'rhel7_64Guest': 'l26', 'rhel8_64Guest': 'l26', 'rhel9_64Guest': 'l26', 'rhel10_64Guest': 'l26',
+    'fedora64Guest': 'l26', 'fedoraGuest': 'l26',
+    'sles15_64Guest': 'l26', 'sles16_64Guest': 'l26', 'sles12_64Guest': 'l26',
+    'oracleLinux64Guest': 'l26', 'oracleLinux7_64Guest': 'l26', 'oracleLinux8_64Guest': 'l26', 'oracleLinux9_64Guest': 'l26',
+    'rockylinux_64Guest': 'l26', 'almalinux_64Guest': 'l26', 'amazonlinux2_64Guest': 'l26', 'amazonlinux3_64Guest': 'l26',
+    'asianux8_64Guest': 'l26', 'coreos64Guest': 'l26', 'flatcar64Guest': 'l26',
+    'otherLinux64Guest': 'l26', 'otherLinuxGuest': 'l26', 'otherLinux24xGuest': 'l24', 'otherLinux26xGuest': 'l26',
+    # Windows
     'windows11_64Guest': 'win11',
-    'otherLinux64Guest': 'l26', 'otherLinuxGuest': 'l26',
+    'windows2022srvNext_64Guest': 'win11', 'windows2022srv_64Guest': 'win11',  # Server 2022/2025 → win11
+    'windows9_64Guest': 'win10', 'windows9Guest': 'win10',
+    'windows2019srv_64Guest': 'win10', 'windows2019srvNext_64Guest': 'win10', 'windows2016srv_64Guest': 'win10',
+    'windows8_64Guest': 'win8', 'windows8Guest': 'win8', 'windows8srv_64Guest': 'win8',
+    'windows7_64Guest': 'win7', 'windows7Guest': 'win7', 'windows7srv_64Guest': 'win7',
+    'winVista64Guest': 'wvista', 'winVistaGuest': 'wvista',
+    'winLonghorn64Guest': 'w2k8', 'winLonghornGuest': 'w2k8',
+    'winXPPro64Guest': 'wxp', 'winXPProGuest': 'wxp',
+    'win2000ProGuest': 'w2k', 'win2000ServGuest': 'w2k', 'win2000AdvServGuest': 'w2k',
+    'winNetStandard64Guest': 'w2k3', 'winNetEnterprise64Guest': 'w2k3',
+    # Other
+    'solaris11_64Guest': 'solaris', 'solaris10_64Guest': 'solaris',
+    'freebsd64Guest': 'other', 'freebsd13_64Guest': 'other', 'freebsd14_64Guest': 'other',
     'otherGuest64': 'other', 'otherGuest': 'other',
 }
 _ESXI_TO_XCP_OSTYPE = {

@@ -449,8 +449,9 @@ def validate_session(session_id: str) -> dict:
         if time.time() - session['last_activity'] > timeout:
             del active_sessions[session_id]
             expired = True
-        # NS: absolute session timeout — 24h max regardless of activity (security hardening)
-        elif time.time() - session.get('created_at', session.get('last_activity', time.time())) > 86400:
+        # NS: absolute session timeout (security audit: was 24h)
+        # remember sessions: 7 days absolute, regular: 12h
+        elif time.time() - session.get('created_at', session.get('last_activity', time.time())) > (7 * 86400 if session.get('remember') else 43200):
             del active_sessions[session_id]
             expired = True
         else:
@@ -460,6 +461,16 @@ def validate_session(session_id: str) -> dict:
     if expired:
         save_sessions()
         return None
+
+    # MK: security audit — optional IP binding, log if IP changed (session hijack indicator)
+    try:
+        from flask import request as _req
+        if _req and hasattr(_req, 'remote_addr'):
+            current_ip = _req.remote_addr
+            session_ip = session.get('ip')
+            if session_ip and current_ip and session_ip != current_ip:
+                logging.warning(f"[SECURITY] Session IP changed: {session_ip} → {current_ip} (user={session.get('user')})")
+    except: pass
 
     return session
 
