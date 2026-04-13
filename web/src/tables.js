@@ -519,6 +519,12 @@
                                 {formatBytes(metrics.mem_used)} / {formatBytes(metrics.mem_total)}
                             </span>
                         </div>
+                        {metrics.ksm && metrics.ksm.shared > 0 && (
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-500">{t('ksmSharing') || 'KSM Sharing'}</span>
+                                <span className="text-purple-400 font-mono">{formatBytes(metrics.ksm.shared)}</span>
+                            </div>
+                        )}
                         
                         {/* Expandable Details */}
                         <button 

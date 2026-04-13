@@ -652,7 +652,11 @@
 
             // card view state (legacy)
             const [hoveredNode, setHoveredNode] = useState(null);
-            const [collapsedNodes, setCollapsedNodes] = useState({});
+            // LW: #299 — persist node collapse state in localStorage, default all collapsed
+            const [collapsedNodes, setCollapsedNodes] = useState(() => {
+                try { const saved = localStorage.getItem('pegaprox-collapsed-nodes'); if (saved) return JSON.parse(saved); } catch(e) {}
+                return { _defaultCollapsed: true };
+            });
             const [expandedVmLists, setExpandedVmLists] = useState({});
             const [connectors, setConnectors] = useState([]);
             const clusterRef = useRef(null);
@@ -698,7 +702,15 @@
             // ── card view helpers ──
             const toggleNode = (name) => setCollapsedNodes(prev => {
                 const next = {...prev};
-                next[name] ? delete next[name] : next[name] = true;
+                // LW: #299 — if _defaultCollapsed is set, first toggle expands (removes from dict)
+                if (next._defaultCollapsed) {
+                    // in default-collapsed mode: node NOT in dict = collapsed, IN dict = expanded
+                    next[name] ? delete next[name] : next[name] = true;
+                } else {
+                    // explicit mode: node IN dict = collapsed
+                    next[name] ? delete next[name] : next[name] = true;
+                }
+                try { localStorage.setItem('pegaprox-collapsed-nodes', JSON.stringify(next)); } catch(e) {}
                 return next;
             });
 
@@ -1510,7 +1522,10 @@
                                     const running = vms.filter(v => v.status === 'running').length;
                                     const stopped = vms.length - running;
                                     const isOnline = node.status === 'online' || node.cpu !== undefined || node.cpu_percent !== undefined;
-                                    const isCollapsed = collapsedNodes[node.name];
+                                    // LW: #299 — default collapsed: node is collapsed unless explicitly expanded
+                                    const isCollapsed = collapsedNodes._defaultCollapsed
+                                        ? !collapsedNodes[node.name]   // default mode: collapsed unless in dict
+                                        : !!collapsedNodes[node.name]; // explicit mode: collapsed if in dict
                                     const cpuPct = node.cpu_percent != null ? node.cpu_percent : ((node.cpu || 0) * 100);
                                     const ramPct = node.mem_percent != null ? node.mem_percent : (node.maxmem ? (node.mem / node.maxmem) * 100 : 0);
 

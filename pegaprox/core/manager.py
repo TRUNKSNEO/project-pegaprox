@@ -985,6 +985,7 @@ class PegaProxManager:
                             'loadavg': loadavg,
                             'cpuinfo': cpuinfo,
                             'pveversion': status_data.get('pveversion', ''),
+                            'ksm': status_data.get('ksm', {}),
                             'kversion': status_data.get('kversion', ''),
                             'maintenance_mode': in_maintenance,
                             'maintenance_task': maintenance_task,
