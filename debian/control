@@ -34,7 +34,7 @@ Depends: ${misc:Depends},
          python3-pil,
          python3-ldap3,
          python3-pyvmomi,
-         python3-os-xenapi
+         python3-xenapi
 Description: Multi-Cluster Manager for Proxmox VE
  PegaProx is a modern multi-cluster management platform for Proxmox VE.
  It provides centralized cluster management, automation,
