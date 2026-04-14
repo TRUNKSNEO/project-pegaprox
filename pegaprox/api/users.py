@@ -13,6 +13,7 @@ from pegaprox.constants import *
 from pegaprox.globals import *
 from pegaprox.models.permissions import *
 from pegaprox.core.db import get_db
+from pegaprox.utils.sanitization import sanitize_username
 
 from pegaprox.utils.auth import (
     hash_password, verify_password, validate_password_policy,
@@ -661,7 +662,7 @@ def create_user():
     global users_db
     
     data = request.get_json()
-    username = data.get('username', '').strip().lower()
+    username = sanitize_username(data.get('username', '').strip().lower())
     password = data.get('password', '')
     role = data.get('role', ROLE_USER)
     display_name = data.get('display_name', username)

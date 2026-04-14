@@ -33,7 +33,7 @@ from pegaprox.utils.oidc import (
 )
 from pegaprox.utils.rbac import get_user_permissions, DEFAULT_TENANT_ID
 from pegaprox.api.helpers import load_server_settings, save_server_settings, get_login_settings, get_session_timeout, safe_error
-from pegaprox.utils.sanitization import sanitize_identifier
+from pegaprox.utils.sanitization import sanitize_identifier, sanitize_username
 from pegaprox.utils.ssh import check_auth_action_rate_limit
 # NS: Mar 2026 - removed add_allowed_origin import (no longer auto-adding on login)
 import requests
@@ -373,7 +373,7 @@ def auth_login():
         return jsonify({'error': 'Invalid request body'}), 400
     
     # sanitize inputs (security stuff)
-    username = sanitize_identifier(data.get('username', '').strip().lower(), max_length=64)
+    username = sanitize_username(data.get('username', '').strip().lower(), max_length=64)
     password = data.get('password', '')[:256]  # limit to prevent DoS
     totp_code = sanitize_identifier(data.get('totp_code', ''), max_length=10)
     

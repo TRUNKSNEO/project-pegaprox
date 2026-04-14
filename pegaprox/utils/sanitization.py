@@ -39,6 +39,14 @@ def sanitize_identifier(value: str, max_length: int = 64) -> str:
     return value[:max_length]
 
 
+def sanitize_username(value: str, max_length: int = 64) -> str:
+    """sanitize username — allows @ for email-style logins"""
+    if not isinstance(value, str):
+        value = str(value) if value is not None else ''
+    value = re.sub(r'[^a-zA-Z0-9_\-\.@\+]', '', value)
+    return value[:max_length]
+
+
 def sanitize_int(value, default: int = 0, min_val: int = None, max_val: int = None) -> int:
     """Sanitize an integer input"""
     try:
