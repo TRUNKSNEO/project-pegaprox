@@ -1,23 +1,19 @@
 {
-    "version": "0.9.6",
-    "build": "2026.04.12",
-    "release_date": "2026-04-12",
+    "version": "0.9.6.1",
+    "build": "2026.04.14",
+    "release_date": "2026-04-14",
     "changelog": [
-        "Predictive Load Balancing with CPU compatibility mode (DRS-style)",
-        "ESXi migration wizard — 3-step config with 28 options, disk/BIOS fixes (#222)",
-        "ISO/Template Sync across cluster nodes for iSCSI-only setups",
-        "Push Notifications plugin — Ntfy + Apprise support (#213)",
-        "Client Portal: ISO mount, Force Stop, OIDC/LDAP login, dashboard overview",
-        "Status Page: incidents, uptime tracking, maintenance banner, SVG badge",
-        "PDF export template (jsPDF) for reports, CVE scans, syslog",
-        "User folders, pagination, syslog FTS5 search (#287, gyptazy)",
-        "Corporate Layout: light mode polish, icon alignment fixes (#289, #290)",
-        "DNS caching — eliminates excessive DNS queries (#279)",
-        "fix: cross-cluster replication on ZFS/LVM/iSCSI (#192), bridge format (#274)",
-        "fix: rolling update node exclusion (#276), CT keyctl/fuse (#278)",
-        "fix: OIDC logout button, SSO re-auth, compliance behind proxy (#281, #294, #295)",
-        "fix: NVMe SMART (#288), offline datastores (#292), backup path (#253)",
-        "security: 12 hardening fixes (TOTP, XSS, rate limiting, session binding, SSRF)"
+        "PBS Update Manager — check APT updates on Backup Servers (#240)",
+        "24h/12h time format toggle in user profile (#215)",
+        "VM wizard: filter disk formats by storage type, ZFS/LVM show raw only (#307)",
+        "VM wizard: searchable ISO dropdown, tab validation, scsihw fix (#304, #305, #306)",
+        "Email-style usernames now allowed for login (#228)",
+        "Console modal enlarged for better visibility (#310)",
+        "OIDC multi-group role mapping picks highest role (#293)",
+        "ESXi migration: pre-flight tool check + clearer error messages (#311)",
+        "Corporate Dark: fix gray-on-gray inputs, global search background (#303, #308)",
+        "KSM sharing display, collapsible nodes, back button localized (#298, #299, #302)",
+        "Remove light theme from Modern Layout, auto-apply corporate theme on switch"
     ],
     "min_python": "3.8",
     "download_url": "https://github.com/PegaProx/project-pegaprox/releases/latest",
@@ -196,12 +192,15 @@
         "plugins/status_page/status.html"
     ],
     "prev_changelog": [
-        "Network View in Corporate Layout sidebar with per-node bridge/VM mapping",
-        "Custom bind address option for reverse proxy setups (#212)",
-        "OIDC JWT verification toggle for environments with unreachable JWKS",
-        "Corporate Layout light mode improvements",
-        "Language picker dropdown for Corporate Layout (PR #236)",
-        "Community plugin: proxmox-ha (PR #226), Spanish translations (PR #234)"
+        "Predictive Load Balancing with CPU compatibility mode (DRS-style)",
+        "ESXi migration wizard — 3-step config with 28 options, disk/BIOS fixes (#222)",
+        "ISO/Template Sync across cluster nodes for iSCSI-only setups",
+        "Push Notifications plugin — Ntfy + Apprise support (#213)",
+        "Client Portal: ISO mount, Force Stop, OIDC/LDAP login, dashboard overview",
+        "Status Page: incidents, uptime tracking, maintenance banner, SVG badge",
+        "PDF export template (jsPDF) for reports, CVE scans, syslog",
+        "User folders, pagination, syslog FTS5 search (#287, gyptazy)",
+        "security: 12 hardening fixes (TOTP, XSS, rate limiting, session binding, SSRF)"
     ],
     "breaking_changes": []
 }
