@@ -6,7 +6,7 @@
         // LW: This handles both QEMU VMs and LXC containers
         // The wizard steps are a bit complex but users seem to like it
         const VM_PRESETS = [
-            { label: 'Ubuntu 24.04 LTS', icon: '🐧', config: { ostype: 'l26', cores: 2, sockets: 1, memory: 2048, disk_size: '32', cpu: 'host', agent: true, bios: 'seabios', machine: 'i440fx', net_model: 'virtio', disk_type: 'scsi', disk_discard: true, disk_iothread: true } },
+            { label: 'Ubuntu 24.04 LTS', icon: '🐧', config: { ostype: 'l26', cores: 2, sockets: 1, memory: 2048, disk_size: '32', cpu: 'host', agent: true, bios: 'seabios', machine: 'i440fx', scsihw: 'virtio-scsi-single', net_model: 'virtio', disk_type: 'scsi', disk_discard: true, disk_iothread: true } },
             { label: 'Windows Server 2022', icon: '🖥️', config: { ostype: 'win11', cores: 4, sockets: 1, memory: 4096, disk_size: '64', cpu: 'host', agent: true, bios: 'ovmf', machine: 'q35', scsihw: 'virtio-scsi-single', net_model: 'virtio', disk_type: 'scsi', disk_discard: true } },
             { label: 'Windows 11', icon: '💻', config: { ostype: 'win11', cores: 4, sockets: 1, memory: 8192, disk_size: '64', cpu: 'host', agent: true, bios: 'ovmf', machine: 'q35', scsihw: 'virtio-scsi-single', net_model: 'virtio', disk_type: 'scsi', tpm_version: 'v2.0' } },
             { label: 'Minimal Linux', icon: '⚡', config: { ostype: 'l26', cores: 1, sockets: 1, memory: 512, disk_size: '8', cpu: 'host', agent: false, bios: 'seabios', net_model: 'virtio', disk_type: 'virtio' } },
@@ -18,6 +18,7 @@
             const { isCorporate } = useLayout();
             const [activeStep, setActiveStep] = useState(0);
             const [loading, setLoading] = useState(false);
+            const [stepErrors, setStepErrors] = useState({});
             const [storageList, setStorageList] = useState([]);
             const [bridgeList, setBridgeList] = useState([]);
             const [isoList, setIsoList] = useState([]);
@@ -325,6 +326,39 @@
                 { value: 'pvscsi', label: 'VMware PVSCSI' },
             ];
 
+            // validate current step before advancing
+            const validateStep = (step) => {
+                const errs = {};
+                if (step === 0) {
+                    if (!config.name || !config.name.trim()) errs.name = t('required') || 'Required';
+                }
+                if (step === 3 && isQemu && !isXcpng) {
+                    if (!config.storage) errs.storage = t('required') || 'Required';
+                }
+                setStepErrors(errs);
+                return Object.keys(errs).length === 0;
+            };
+
+            // MK: storage type -> supported disk formats
+            // ZFS/LVM/RBD only do raw, file-based storages support all
+            const STORAGE_FORMATS = {
+                zfspool: ['raw'], zfs: ['raw'],
+                lvm: ['raw'], lvmthin: ['raw'],
+                rbd: ['raw'],
+                iscsi: ['raw'], iscsidirect: ['raw'],
+                dir: ['raw', 'qcow2', 'vmdk'],
+                nfs: ['raw', 'qcow2', 'vmdk'],
+                cifs: ['raw', 'qcow2', 'vmdk'],
+                glusterfs: ['raw', 'qcow2', 'vmdk'],
+                cephfs: ['raw', 'qcow2', 'vmdk'],
+                btrfs: ['raw', 'qcow2', 'vmdk'],
+            };
+            const getAllowedFormats = (storageName) => {
+                const st = storageList.find(s => s.storage === storageName);
+                if (!st) return ['raw', 'qcow2', 'vmdk'];
+                return STORAGE_FORMATS[st.type] || ['raw', 'qcow2', 'vmdk'];
+            };
+
             const renderStepContent = () => {
                 // Filter storages by content type
                 const diskStorages = storageList.filter(s => {
@@ -356,9 +390,10 @@
                                     </div>
                                     <div>
                                         <label className="block text-sm text-gray-400 mb-1">{t('name')}</label>
-                                        <input type="text" value={config.name} onChange={e => setConfig({...config, name: e.target.value})}
+                                        <input type="text" value={config.name} onChange={e => { setConfig({...config, name: e.target.value}); if (stepErrors.name) setStepErrors({}); }}
                                             placeholder="my-virtual-machine"
-                                            className="w-full px-3 py-2 bg-proxmox-dark border border-proxmox-border rounded-lg text-white" />
+                                            className={`w-full px-3 py-2 bg-proxmox-dark border rounded-lg text-white ${stepErrors.name ? 'border-red-500' : 'border-proxmox-border'}`} />
+                                        {stepErrors.name && <p className="text-xs text-red-400 mt-1">{stepErrors.name}</p>}
                                     </div>
                                     {isQemu && (
                                         <div className="pt-3 border-t border-proxmox-border">
@@ -458,14 +493,43 @@
                                             {osTypes.map(os => <option key={os.value} value={os.value}>{os.label}</option>)}
                                         </select>
                                     </div>
-                                    <div>
+                                    <div className="relative">
                                         <label className="block text-sm text-gray-400 mb-1">{t('isoImage')}</label>
-                                        <select value={config.iso} onChange={e => setConfig({...config, iso: e.target.value})}
-                                            className="w-full px-3 py-2 bg-proxmox-dark border border-proxmox-border rounded-lg text-white">
-                                            <option value="">{t('noIso')}</option>
-                                            {isoList.length === 0 && <option disabled>{t('noIsoAvailable')}</option>}
-                                            {isoList.map(iso => <option key={iso.volid} value={iso.volid}>{iso.volid.split('/').pop()}</option>)}
-                                        </select>
+                                        <input
+                                            type="text"
+                                            value={config._isoSearch !== undefined ? config._isoSearch : (config.iso ? config.iso.split('/').pop() : '')}
+                                            onChange={e => setConfig({...config, _isoSearch: e.target.value, _isoOpen: true})}
+                                            onFocus={() => setConfig(prev => ({...prev, _isoOpen: true, _isoSearch: prev._isoSearch !== undefined ? prev._isoSearch : ''}))}
+                                            placeholder={t('noIso') || 'No ISO'}
+                                            className="w-full px-3 py-2 bg-proxmox-dark border border-proxmox-border rounded-lg text-white"
+                                        />
+                                        {config.iso && !config._isoOpen && (
+                                            <button onClick={() => setConfig({...config, iso: '', _isoSearch: '', _isoOpen: false})}
+                                                className="absolute right-2 top-8 text-gray-500 hover:text-white">
+                                                <Icons.X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        {config._isoOpen && (() => {
+                                            const q = (config._isoSearch || '').toLowerCase();
+                                            const filtered = isoList.filter(iso => !q || iso.volid.toLowerCase().includes(q));
+                                            return (
+                                                <>
+                                                    <div className="fixed inset-0 z-10" onClick={() => setConfig(prev => ({...prev, _isoOpen: false, _isoSearch: undefined}))} />
+                                                    <div className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-proxmox-card border border-proxmox-border rounded-lg shadow-xl">
+                                                        <div onClick={() => setConfig(prev => ({...prev, iso: '', _isoOpen: false, _isoSearch: undefined}))}
+                                                            className="px-3 py-2 text-sm text-gray-400 hover:bg-proxmox-hover cursor-pointer">{t('noIso')}</div>
+                                                        {filtered.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">{t('noResults') || 'No results'}</div>}
+                                                        {filtered.map(iso => (
+                                                            <div key={iso.volid}
+                                                                onClick={() => setConfig(prev => ({...prev, iso: iso.volid, _isoOpen: false, _isoSearch: undefined}))}
+                                                                className="px-3 py-2 text-sm text-white hover:bg-proxmox-hover cursor-pointer truncate">
+                                                                {iso.volid.split('/').pop()}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
                                         {isoStorages.length === 0 && (
                                             <p className="text-xs text-yellow-500 mt-1">⚠️ {t('noIsoStorage')}</p>
                                         )}
@@ -678,13 +742,13 @@
                                         <div className="grid grid-cols-4 gap-3 mb-3">
                                             <div>
                                                 <label className="block text-xs text-gray-400 mb-1">{t('format')}</label>
-                                                <select value={config.disk_format} onChange={e => setConfig({...config, disk_format: e.target.value})}
-                                                    className="w-full px-2 py-1.5 bg-proxmox-dark border border-proxmox-border rounded text-white text-sm">
-                                                    <option value="">{t('storageDefault') || 'Default'}</option>
-                                                    <option value="raw">Raw</option>
-                                                    <option value="qcow2">QCOW2</option>
-                                                    <option value="vmdk">VMDK</option>
-                                                </select>
+                                                {(() => { const fmts = getAllowedFormats(config.storage); return (
+                                                <select value={fmts.length === 1 ? '' : config.disk_format} onChange={e => setConfig({...config, disk_format: e.target.value})}
+                                                    className="w-full px-2 py-1.5 bg-proxmox-dark border border-proxmox-border rounded text-white text-sm"
+                                                    disabled={fmts.length === 1}>
+                                                    <option value="">{fmts.length === 1 ? fmts[0].toUpperCase() : (t('storageDefault') || 'Default')}</option>
+                                                    {fmts.length > 1 && fmts.map(f => <option key={f} value={f}>{f === 'raw' ? 'Raw' : f === 'qcow2' ? 'QCOW2' : 'VMDK'}</option>)}
+                                                </select>); })()}
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-gray-400 mb-1">{t('cache')}</label>
@@ -776,17 +840,17 @@
                                             <div className="grid grid-cols-4 gap-3 mb-3">
                                                 <div>
                                                     <label className="block text-xs text-gray-400 mb-1">{t('format')}</label>
-                                                    <select value={disk.format || ''} onChange={e => {
+                                                    {(() => { const fmts = getAllowedFormats(disk.storage); return (
+                                                    <select value={fmts.length === 1 ? '' : (disk.format || '')} onChange={e => {
                                                         const newDisks = [...config.additional_disks];
                                                         newDisks[idx] = {...disk, format: e.target.value};
                                                         setConfig({...config, additional_disks: newDisks});
                                                     }}
-                                                        className="w-full px-2 py-1.5 bg-proxmox-dark border border-proxmox-border rounded text-white text-sm">
-                                                        <option value="">{t('storageDefault') || 'Default'}</option>
-                                                        <option value="raw">Raw</option>
-                                                        <option value="qcow2">QCOW2</option>
-                                                        <option value="vmdk">VMDK</option>
-                                                    </select>
+                                                        className="w-full px-2 py-1.5 bg-proxmox-dark border border-proxmox-border rounded text-white text-sm"
+                                                        disabled={fmts.length === 1}>
+                                                        <option value="">{fmts.length === 1 ? fmts[0].toUpperCase() : (t('storageDefault') || 'Default')}</option>
+                                                        {fmts.length > 1 && fmts.map(f => <option key={f} value={f}>{f === 'raw' ? 'Raw' : f === 'qcow2' ? 'QCOW2' : 'VMDK'}</option>)}
+                                                    </select>); })()}
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs text-gray-400 mb-1">{t('cache')}</label>
@@ -1650,7 +1714,7 @@
                                 </button>
                                 {activeStep < steps.length - 1 ? (
                                     <button
-                                        onClick={() => setActiveStep(activeStep + 1)}
+                                        onClick={() => { if (validateStep(activeStep)) setActiveStep(activeStep + 1); }}
                                         className="px-4 py-2 bg-proxmox-orange rounded-lg text-white hover:bg-orange-600"
                                     >
                                         {t('next')}
@@ -2556,7 +2620,7 @@
                                             {/* Modern layout card */}
                                             <button
                                                 onClick={async () => {
-                                                    const result = await updatePreferences({ ui_layout: 'modern' });
+                                                    const result = await updatePreferences({ ui_layout: 'modern', theme: 'proxmoxDark' });
                                                     if (result.success) addToast(`${t('layoutStyle')}: ${t('layoutModern') || 'Modern'}`, 'success');
                                                 }}
                                                 className={`p-3 rounded-xl border-2 transition-all hover:scale-105 text-left ${
@@ -2590,7 +2654,8 @@
                                             {/* Corporate layout card */}
                                             <button
                                                 onClick={async () => {
-                                                    const result = await updatePreferences({ ui_layout: 'corporate' });
+                                                    const corpTheme = localStorage.getItem('corp-theme') === 'light' ? 'corporateLight' : 'corporateDark';
+                                                    const result = await updatePreferences({ ui_layout: 'corporate', theme: corpTheme });
                                                     if (result.success) addToast(`${t('layoutStyle')}: ${t('layoutCorporate') || 'Corporate'}`, 'success');
                                                 }}
                                                 className={`p-3 rounded-xl border-2 transition-all hover:scale-105 text-left ${

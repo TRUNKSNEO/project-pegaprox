@@ -292,26 +292,6 @@
                     info: '#58A6FF'
                 }
             },
-            proxmoxLight: {
-                name: 'Proxmox Light',
-                icon: '☀️',
-                description: 'Clean light theme for daytime use',
-                colors: {
-                    primary: '#E57000',
-                    primaryHover: '#CC6400',
-                    dark: '#F6F8FA',
-                    darker: '#FFFFFF',
-                    card: '#FFFFFF',
-                    border: '#D0D7DE',
-                    hover: '#F3F4F6',
-                    text: '#1F2328',
-                    textMuted: '#656D76',
-                    success: '#1A7F37',
-                    warning: '#9A6700',
-                    error: '#CF222E',
-                    info: '#0969DA'
-                }
-            },
             midnight: {
                 name: 'Midnight Blue',
                 icon: '🌌',
@@ -673,7 +653,7 @@
             
             // Special handling for light theme - only if body exists
             if (document.body) {
-                const lightThemes = ['proxmoxLight', 'corporateLight'];
+                const lightThemes = ['corporateLight'];
                 if (lightThemes.includes(themeName)) {
                     document.body.classList.add('light-theme');
                     document.body.classList.remove('dark-theme');
@@ -1930,6 +1910,14 @@
         .corp-hover-tip-value { color: #adbbc4; font-weight: 500; }
         .corp-hover-tip-bar { height: 3px; background: #1b2a32; border-radius: 1px; margin-top: 2px; }
         .corp-hover-tip-bar > div { height: 100%; border-radius: 1px; }
+
+        /* LW: Apr 2026 - fix gray-on-gray in advanced sections (#303) */
+        body[data-layout="corporate"] .fixed.inset-0 details label { color: #adbbc4 !important; }
+        body[data-layout="corporate"] .fixed.inset-0 details input:not([type="checkbox"]):not([type="radio"]),
+        body[data-layout="corporate"] .fixed.inset-0 details select {
+            background: var(--corp-surface-3) !important; color: #e9ecef !important;
+            border-color: var(--corp-border-medium) !important;
+        }
 
         /* MK: Mar 2026 - corporate modal refinement */
         .corp-modal-header { background: var(--corp-surface-0); border-bottom: 1px solid var(--corp-border-medium);

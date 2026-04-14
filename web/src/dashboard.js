@@ -7202,7 +7202,7 @@
                                         {showGlobalSearch && globalSearchResults && (
                                             <>
                                                 <div className="fixed inset-0 z-40" onClick={() => setShowGlobalSearch(false)} />
-                                                <div className={`absolute top-full right-0 md:left-0 mt-2 w-[28rem] max-h-[32rem] overflow-y-auto shadow-2xl z-50 ${isCorporate ? 'bg-[#1e3340] border border-[#344955] rounded-md' : 'bg-proxmox-card border border-proxmox-border rounded-xl'}`}>
+                                                <div className={`absolute top-full right-0 md:left-0 mt-2 w-[28rem] max-h-[32rem] overflow-y-auto z-50 ${isCorporate ? 'rounded-md border-2' : 'bg-proxmox-card border border-proxmox-border rounded-xl shadow-2xl'}`} style={isCorporate ? {background: '#243542', borderColor: '#49afd9', boxShadow: '0 8px 32px rgba(0,0,0,0.5)'} : {}}>
                                                     {/* Header with count and prefix hints */}
                                                     <div className="p-3 border-b border-proxmox-border">
                                                         <div className="flex justify-between items-center">
@@ -7341,6 +7341,7 @@
                                                 const next = !corpLight;
                                                 document.body.dataset.corpTheme = next ? 'light' : '';
                                                 localStorage.setItem('corp-theme', next ? 'light' : '');
+                                                applyTheme(next ? 'corporateLight' : 'corporateDark');
                                                 setCorpLight(next);
                                             }}
                                             className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"

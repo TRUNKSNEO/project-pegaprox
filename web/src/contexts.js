@@ -376,8 +376,13 @@
             const isCorporate = layout === 'corporate';
 
             // Set data-layout on body whenever layout changes
+            // also force matching theme so modern themes dont bleed into corporate
             useEffect(() => {
                 document.body.setAttribute('data-layout', layout);
+                if (isCorporate) {
+                    const isLight = localStorage.getItem('corp-theme') === 'light';
+                    applyTheme(isLight ? 'corporateLight' : 'corporateDark');
+                }
             }, [layout]);
 
             return { layout, isCorporate };
