@@ -15,6 +15,23 @@
         const PEGAPROX_VERSION = "Beta 0.9.6";
         const DEBUG = false; // set true for verbose logging
 
+        // NS: global time formatting — reads user pref from localStorage
+        function fmtDate(d, opts = {}) {
+            if (!d) return '';
+            const dt = d instanceof Date ? d : new Date(typeof d === 'number' && d < 1e12 ? d * 1000 : d);
+            if (isNaN(dt)) return '';
+            const h12 = localStorage.getItem('pegaprox-time-format') === '12h';
+            const defaults = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: h12 };
+            return dt.toLocaleString(undefined, {...defaults, ...opts});
+        }
+        function fmtTime(d) {
+            if (!d) return '';
+            const dt = d instanceof Date ? d : new Date(typeof d === 'number' && d < 1e12 ? d * 1000 : d);
+            if (isNaN(dt)) return '';
+            const h12 = localStorage.getItem('pegaprox-time-format') === '12h';
+            return dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: h12 });
+        }
+
         // NS: timezone list for node time config (matches backend get_timezones)
         const TIMEZONES = [
             'UTC', 'Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'Europe/London',

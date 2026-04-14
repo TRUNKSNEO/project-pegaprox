@@ -208,13 +208,13 @@
                                     <div>
                                         <span className="text-gray-500 block">{t('startTime')}</span>
                                         <span className="text-white">
-                                            {selectedTask.starttime ? new Date(selectedTask.starttime * 1000).toLocaleString() : '-'}
+                                            {selectedTask.starttime ? fmtDate(selectedTask.starttime * 1000) : '-'}
                                         </span>
                                     </div>
                                     <div>
                                         <span className="text-gray-500 block">{t('endTime')}</span>
                                         <span className="text-white">
-                                            {selectedTask.endtime ? new Date(selectedTask.endtime * 1000).toLocaleString() : '-'}
+                                            {selectedTask.endtime ? fmtDate(selectedTask.endtime * 1000) : '-'}
                                         </span>
                                     </div>
                                     <div>
@@ -379,10 +379,10 @@
                                                             }`} />
                                                         </td>
                                                         <td className="px-4 py-2 text-gray-400 whitespace-nowrap">
-                                                            {task.starttime ? new Date(task.starttime * 1000).toLocaleString() : '-'}
+                                                            {task.starttime ? fmtDate(task.starttime * 1000) : '-'}
                                                         </td>
                                                         <td className="px-4 py-2 text-gray-400 whitespace-nowrap">
-                                                            {task.endtime ? new Date(task.endtime * 1000).toLocaleString() : '-'}
+                                                            {task.endtime ? fmtDate(task.endtime * 1000) : '-'}
                                                         </td>
                                                         <td className="px-4 py-2 text-white">{task.node || '-'}</td>
                                                         <td className="px-4 py-2 text-gray-300" title={task.pegaprox_user ? `PegaProx: ${task.pegaprox_user}\nProxmox: ${task.user || '-'}` : (task.user || '-')}>
@@ -1963,7 +1963,7 @@
                                                             ? <input type="number" className="w-16 bg-proxmox-dark border border-proxmox-border rounded px-1 py-0.5 text-xs" defaultValue={vm.boot_delay} autoFocus onBlur={e => handleUpdateVm(vm.id, 'boot_delay', parseInt(e.target.value))} onKeyDown={e => e.key === 'Enter' && handleUpdateVm(vm.id, 'boot_delay', parseInt(e.target.value))} />
                                                             : <span className="cursor-pointer hover:text-proxmox-orange" onClick={() => setEditingVm({id: vm.id, field: 'boot_delay'})}>{vm.boot_delay}s</span>
                                                         }</td>
-                                                        <td className="py-2"><span className={rpoColor(vm)}>{vm.last_replication ? new Date(vm.last_replication).toLocaleString() : '-'}</span></td>
+                                                        <td className="py-2"><span className={rpoColor(vm)}>{vm.last_replication ? fmtDate(vm.last_replication) : '-'}</span></td>
                                                         {canManage && <td className="py-2"><button onClick={() => handleRemoveVm(vm.id)} className="text-red-400 hover:text-red-300"><Icons.Trash2 className="w-3.5 h-3.5" /></button></td>}
                                                     </tr>
                                                 ))}
@@ -2034,7 +2034,7 @@
                                                 <div className="flex items-center gap-2">
                                                     <span className={`px-2 py-0.5 rounded text-xs ${typeColors[ev.event_type] || 'bg-gray-500/20 text-gray-400'}`}>{ev.event_type}</span>
                                                     <span className={`px-2 py-0.5 rounded text-xs ${statusColors[ev.status] || ''}`}>{ev.status}</span>
-                                                    <span className="text-xs text-gray-500">{new Date(ev.started_at).toLocaleString()}</span>
+                                                    <span className="text-xs text-gray-500">{fmtDate(ev.started_at)}</span>
                                                     {dur !== null && <span className="text-xs text-gray-600">{dur < 60 ? `${dur}s` : `${Math.floor(dur/60)}m ${dur%60}s`}</span>}
                                                 </div>
                                                 <span className="text-xs text-gray-500">{ev.triggered_by}</span>
@@ -2114,7 +2114,7 @@
                                         <h3 className="font-semibold">{t('readinessCheck')}</h3>
                                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${showReadinessModal.status === 'passed' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{showReadinessModal.status === 'passed' ? (t('readinessPassed') || 'Passed') : (t('readinessFailed') || 'Failed')}</span>
                                     </div>
-                                    <p className="text-xs text-gray-500">{showReadinessModal.vm_count} VMs checked at {new Date(showReadinessModal.checked_at).toLocaleString()}</p>
+                                    <p className="text-xs text-gray-500">{showReadinessModal.vm_count} VMs checked at {fmtDate(showReadinessModal.checked_at)}</p>
                                     <div className="space-y-2 max-h-60 overflow-y-auto">
                                         {(showReadinessModal.issues || []).length === 0 ? <p className="text-sm text-green-400">{t('noIssues') || 'No issues found'}</p>
                                         : showReadinessModal.issues.map((issue, i) => (
@@ -2149,7 +2149,7 @@
                             {plans.map(plan => (
                                 <div key={plan.id} onClick={() => setSelectedPlan(plan.id)} className="bg-proxmox-card border border-proxmox-border rounded-xl p-4 cursor-pointer hover:border-proxmox-orange/50 transition-colors">
                                     <div className="flex items-center justify-between mb-3"><h3 className="font-medium text-sm">{plan.name}</h3><span className={`px-2 py-0.5 rounded-full text-xs ${statusColors[plan.status] || 'bg-gray-500/20 text-gray-400'}`}>{plan.status}</span></div>
-                                    <div className="text-xs text-gray-500 space-y-1"><p>{getClusterName(plan.source_cluster)} → {getClusterName(plan.target_cluster)}</p><p>{plan.vm_count} {t('protectedVMs')}</p>{plan.last_failover && <p>Last failover: {new Date(plan.last_failover).toLocaleString()}</p>}</div>
+                                    <div className="text-xs text-gray-500 space-y-1"><p>{getClusterName(plan.source_cluster)} → {getClusterName(plan.target_cluster)}</p><p>{plan.vm_count} {t('protectedVMs')}</p>{plan.last_failover && <p>Last failover: {fmtDate(plan.last_failover)}</p>}</div>
                                     {canManage && <div className="mt-3 flex justify-end"><button onClick={(e) => { e.stopPropagation(); handleDeletePlan(plan.id, plan.status === 'running' || plan.status === 'testing'); }} className="text-red-400 hover:text-red-300 text-xs"><Icons.Trash2 className="w-3.5 h-3.5" /></button></div>}
                                 </div>
                             ))}
@@ -8436,10 +8436,10 @@
                                                                     </div>
                                                                     <div className="mt-4 pt-3 border-t border-red-500/30 text-xs text-red-400">
                                                                         <Icons.AlertTriangle className="inline w-3 h-3 mr-1" />
-                                                                        {t('offlineSince') || 'Offline since'}: {nodeData.offlineSince ? new Date(nodeData.offlineSince).toLocaleTimeString() : 'Unknown'}
+                                                                        {t('offlineSince') || 'Offline since'}: {nodeData.offlineSince ? new Date(nodeData.offlineSince).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: localStorage.getItem('pegaprox-time-format') === '12h' }) : 'Unknown'}
                                                                     </div>
                                                                     <div className="text-xs text-gray-500 mt-2">
-                                                                        {t('lastSeen') || 'Last seen'}: {nodeData.lastSeen ? new Date(nodeData.lastSeen).toLocaleString() : 'Unknown'}
+                                                                        {t('lastSeen') || 'Last seen'}: {nodeData.lastSeen ? fmtDate(nodeData.lastSeen) : 'Unknown'}
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -8487,7 +8487,7 @@
                                                                     </div>
                                                                     <div className="mt-4 pt-3 border-t border-red-500/30 text-xs text-red-400">
                                                                         <Icons.AlertTriangle className="inline w-3 h-3 mr-1" />
-                                                                        {t('offlineSince') || 'Offline since'}: {new Date(alert.timestamp).toLocaleTimeString()}
+                                                                        {t('offlineSince') || 'Offline since'}: {new Date(alert.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: localStorage.getItem('pegaprox-time-format') === '12h' })}
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -9521,7 +9521,7 @@
                                                                         )}
                                                                         {script.last_run && (
                                                                             <p className="text-xs text-gray-600 mt-2">
-                                                                                Last run: {new Date(script.last_run).toLocaleString()} - 
+                                                                                Last run: {fmtDate(script.last_run)} - 
                                                                                 <span className={
                                                                                     script.last_status === 'success' ? 'text-green-400 ml-1' :
                                                                                     script.last_status === 'partial' ? 'text-yellow-400 ml-1' :
@@ -10313,7 +10313,7 @@
                                                                                     <div className="px-4 py-2 bg-proxmox-dark/50 flex gap-6 text-xs text-gray-500">
                                                                                         {node.os && <span>OS: {node.os}</span>}
                                                                                         {node.kernel && <span>Kernel: {node.kernel}</span>}
-                                                                                        {node.timestamp && <span>{t('scannedAt') || 'Scanned at'}: {new Date(node.timestamp).toLocaleTimeString()}</span>}
+                                                                                        {node.timestamp && <span>{t('scannedAt') || 'Scanned at'}: {new Date(node.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: localStorage.getItem('pegaprox-time-format') === '12h' })}</span>}
                                                                                     </div>
 
                                                                                     {/* CVE table from debsecan */}
@@ -10438,7 +10438,7 @@
                                                                 </div>
 
                                                                 <div className="text-xs text-gray-600 text-center">
-                                                                    {t('scannedAt') || 'Scanned at'} {new Date(cveResults.scanned_at).toLocaleString()}
+                                                                    {t('scannedAt') || 'Scanned at'} {fmtDate(cveResults.scanned_at)}
                                                                 </div>
                                                             </div>
                                                         )}
@@ -10961,7 +10961,7 @@
                                                             {selectedCluster.last_run && (
                                                                 <div className="flex justify-between">
                                                                     <span className="text-gray-500">{t('lastCheck')}</span>
-                                                                    <span>{new Date(selectedCluster.last_run).toLocaleString()}</span>
+                                                                    <span>{fmtDate(selectedCluster.last_run)}</span>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -11285,7 +11285,7 @@
                                                                                     {!task.endtime ? 'running' : (task.status || '?')}
                                                                                 </span>
                                                                             </td>
-                                                                            <td className="p-3 text-gray-400">{task.starttime ? new Date(task.starttime * 1000).toLocaleString() : '-'}</td>
+                                                                            <td className="p-3 text-gray-400">{task.starttime ? fmtDate(task.starttime * 1000) : '-'}</td>
                                                                             <td className="p-3 text-gray-400">{task.starttime ? pbsFormatDuration(task.starttime, task.endtime) : '-'}</td>
                                                                             <td className="p-3 text-gray-500 truncate max-w-[200px]">{task.worker_id || '-'}</td>
                                                                         </tr>
@@ -11494,7 +11494,7 @@
                                                                             <div className="bg-proxmox-card border border-proxmox-border rounded-xl p-3 flex-1 min-w-[300px]">
                                                                                 <span className="text-xs text-gray-500 block mb-1.5">Garbage Collection</span>
                                                                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                                                                                    <span className="text-gray-500">Last GC:</span><span className="text-gray-300">{new Date(gcStatus['last-run-endtime'] * 1000).toLocaleString()}</span>
+                                                                                    <span className="text-gray-500">Last GC:</span><span className="text-gray-300">{fmtDate(gcStatus['last-run-endtime'] * 1000)}</span>
                                                                                     <span className="text-gray-500">Duration:</span><span className="text-gray-300">{gcStatus['last-run-duration'] ? `${Math.floor(gcStatus['last-run-duration'] / 60)}m ${gcStatus['last-run-duration'] % 60}s` : '-'}</span>
                                                                                     <span className="text-gray-500">Dedup Factor:</span><span className="text-cyan-400 font-medium">{(gcStatus['dedup-factor'] || 1).toFixed(2)}x</span>
                                                                                     <span className="text-gray-500">Disk Chunks:</span><span className="text-gray-300">{(gcStatus['disk-chunks'] || 0).toLocaleString()}</span>
@@ -11534,7 +11534,7 @@
                                                                                         </td>
                                                                                         <td className="p-3 text-white font-medium">{grp['backup-id']}</td>
                                                                                         <td className="p-3 text-gray-300">{grp['backup-count'] || grp.count || '-'}</td>
-                                                                                        <td className="p-3 text-gray-400">{grp['last-backup'] ? new Date(grp['last-backup'] * 1000).toLocaleString() : '-'}</td>
+                                                                                        <td className="p-3 text-gray-400">{grp['last-backup'] ? fmtDate(grp['last-backup'] * 1000) : '-'}</td>
                                                                                         <td className="p-3 text-gray-400">{grp.size ? formatBytes(grp.size) : '-'}</td>
                                                                                         <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                                                                                             <button onClick={() => { setPbsEditingNotes({ type: 'group', params: { 'backup-type': grp['backup-type'], 'backup-id': grp['backup-id'] }, label: `${grp['backup-type']}/${grp['backup-id']}` }); setPbsNotesText(grp.comment || grp.notes || ''); }} className="px-2 py-1 rounded text-xs text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all" title="Group Notes">
@@ -11579,7 +11579,7 @@
                                                                                             <td className="p-3">
                                                                                                 <span className="text-white">{snap['backup-type']}/{snap['backup-id']}</span>
                                                                                             </td>
-                                                                                            <td className="p-3 text-gray-300">{snap['backup-time'] ? new Date(snap['backup-time'] * 1000).toLocaleString() : '-'}</td>
+                                                                                            <td className="p-3 text-gray-300">{snap['backup-time'] ? fmtDate(snap['backup-time'] * 1000) : '-'}</td>
                                                                                             <td className="p-3 text-gray-400">{snap.size ? formatBytes(snap.size) : '-'}</td>
                                                                                             <td className="p-3">
                                                                                                 {snap.verification ? (
@@ -11607,7 +11607,7 @@
                                                                                                     <Icons.FileText className="w-3.5 h-3.5" />
                                                                                                 </button>
                                                                                                 {isAdmin && (
-                                                                                                    <button onClick={() => { if (confirm(`Delete snapshot ${snap['backup-type']}/${snap['backup-id']} @ ${new Date(snap['backup-time'] * 1000).toLocaleString()}?`)) pbsAction('delete-snapshot', pbsSelectedStore, { backup_type: snap['backup-type'], backup_id: snap['backup-id'], backup_time: snap['backup-time'] }); }} className="px-2 py-1 rounded text-xs text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
+                                                                                                    <button onClick={() => { if (confirm(`Delete snapshot ${snap['backup-type']}/${snap['backup-id']} @ ${fmtDate(snap['backup-time'] * 1000)}?`)) pbsAction('delete-snapshot', pbsSelectedStore, { backup_type: snap['backup-type'], backup_id: snap['backup-id'], backup_time: snap['backup-time'] }); }} className="px-2 py-1 rounded text-xs text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
                                                                                                         <Icons.Trash className="w-3.5 h-3.5" />
                                                                                                     </button>
                                                                                                 )}
@@ -11662,7 +11662,7 @@
                                                                             'bg-red-500/20 text-red-400'
                                                                         }`}>{!task.endtime ? 'running' : (task.status || '?')}</span>
                                                                     </td>
-                                                                    <td className="p-3 text-gray-400">{task.starttime ? new Date(task.starttime * 1000).toLocaleString() : '-'}</td>
+                                                                    <td className="p-3 text-gray-400">{task.starttime ? fmtDate(task.starttime * 1000) : '-'}</td>
                                                                     <td className="p-3 text-gray-400">{task.starttime ? pbsFormatDuration(task.starttime, task.endtime) : '-'}</td>
                                                                     <td className="p-3 text-gray-500">{task.user || '-'}</td>
                                                                 </tr>
@@ -11713,7 +11713,7 @@
                                                                             <td className="p-3 text-gray-300">{job.store}</td>
                                                                             <td className="p-3 text-gray-400">{job.remote || '-'} / {job['remote-store'] || '-'}</td>
                                                                             <td className="p-3 text-gray-400">{job.schedule || 'manual'}</td>
-                                                                            <td className="p-3 text-gray-500">{job['last-run-endtime'] ? new Date(job['last-run-endtime'] * 1000).toLocaleString() : '-'}</td>
+                                                                            <td className="p-3 text-gray-500">{job['last-run-endtime'] ? fmtDate(job['last-run-endtime'] * 1000) : '-'}</td>
                                                                             {isAdmin && (
                                                                                 <td className="p-3 text-right">
                                                                                     <button onClick={() => pbsRunJob('sync', job.id)} className="px-2 py-1 rounded text-xs bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-all flex items-center gap-1 ml-auto">
@@ -11746,7 +11746,7 @@
                                                                             <td className="p-3 text-gray-300">{job.store}</td>
                                                                             <td className="p-3 text-gray-400">{job.schedule || 'manual'}</td>
                                                                             <td className="p-3 text-gray-400">{job['ignore-verified'] ? 'Yes' : 'No'}</td>
-                                                                            <td className="p-3 text-gray-500">{job['last-run-endtime'] ? new Date(job['last-run-endtime'] * 1000).toLocaleString() : '-'}</td>
+                                                                            <td className="p-3 text-gray-500">{job['last-run-endtime'] ? fmtDate(job['last-run-endtime'] * 1000) : '-'}</td>
                                                                             {isAdmin && (
                                                                                 <td className="p-3 text-right">
                                                                                     <button onClick={() => pbsRunJob('verify', job.id)} className="px-2 py-1 rounded text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-all flex items-center gap-1 ml-auto">
@@ -11781,7 +11781,7 @@
                                                                             <td className="p-3 text-gray-400 text-xs">
                                                                                 {[job['keep-last'] && `L:${job['keep-last']}`, job['keep-daily'] && `D:${job['keep-daily']}`, job['keep-weekly'] && `W:${job['keep-weekly']}`, job['keep-monthly'] && `M:${job['keep-monthly']}`, job['keep-yearly'] && `Y:${job['keep-yearly']}`].filter(Boolean).join(' ') || '-'}
                                                                             </td>
-                                                                            <td className="p-3 text-gray-500">{job['last-run-endtime'] ? new Date(job['last-run-endtime'] * 1000).toLocaleString() : '-'}</td>
+                                                                            <td className="p-3 text-gray-500">{job['last-run-endtime'] ? fmtDate(job['last-run-endtime'] * 1000) : '-'}</td>
                                                                             {isAdmin && (
                                                                                 <td className="p-3 text-right">
                                                                                     <button onClick={() => pbsRunJob('prune', job.id)} className="px-2 py-1 rounded text-xs bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-all flex items-center gap-1 ml-auto">
@@ -12625,7 +12625,7 @@
                                                                                         <div>
                                                                                             <div className="text-sm font-medium text-white">{snap.name}</div>
                                                                                             {snap.description && <div className="text-xs text-gray-500">{snap.description}</div>}
-                                                                                            {snap.created && <div className="text-xs text-gray-600">{new Date(snap.created).toLocaleString()}</div>}
+                                                                                            {snap.created && <div className="text-xs text-gray-600">{fmtDate(snap.created)}</div>}
                                                                                         </div>
                                                                                     </div>
                                                                                     <button onClick={() => vmwareSnapshotAction(vmwareSelectedVm, 'delete', { snapshot_id: snap.id || snap.snapshot })} className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg" title="Delete snapshot">
@@ -13517,7 +13517,7 @@
                                                                         </div>
                                                                         <div className="flex items-center gap-4 text-xs text-gray-600">
                                                                             <span>→ {m.target_node}/{m.target_storage}</span>
-                                                                            {m.started_at && <span>{new Date(m.started_at).toLocaleString()}</span>}
+                                                                            {m.started_at && <span>{fmtDate(m.started_at)}</span>}
                                                                             {m.proxmox_vmid && <span>PVE: {m.proxmox_vmid}</span>}
                                                                         </div>
                                                                         {m.phase_times && Object.keys(m.phase_times).length > 1 && (
@@ -13601,7 +13601,7 @@
                                                                             </div>
                                                                             <div className="text-xs text-gray-500 truncate">{evt.details || '-'}</div>
                                                                         </div>
-                                                                        <span className="text-xs text-gray-600 whitespace-nowrap">{evt.timestamp ? new Date(evt.timestamp).toLocaleString() : ''}</span>
+                                                                        <span className="text-xs text-gray-600 whitespace-nowrap">{evt.timestamp ? fmtDate(evt.timestamp) : ''}</span>
                                                                     </div>
                                                                 );
                                                             })}
@@ -13933,7 +13933,7 @@
                                                                     </div>
                                                                     <div className="flex items-center gap-4 text-xs text-gray-600">
                                                                         <span>→ {m.target_node}/{m.target_storage}</span>
-                                                                        {m.started_at && <span>{new Date(m.started_at).toLocaleString()}</span>}
+                                                                        {m.started_at && <span>{fmtDate(m.started_at)}</span>}
                                                                         {m.target_vmid && <span>VMID: {m.target_vmid}</span>}
                                                                     </div>
                                                                     {/* Phase timeline */}
@@ -14181,7 +14181,7 @@
                                             File Browser
                                         </h2>
                                         <p className="text-xs text-gray-500 mt-1">
-                                            {pbsCatalogSnapshot['backup-type']}/{pbsCatalogSnapshot['backup-id']} @ {new Date(pbsCatalogSnapshot['backup-time'] * 1000).toLocaleString()}
+                                            {pbsCatalogSnapshot['backup-type']}/{pbsCatalogSnapshot['backup-id']} @ {fmtDate(pbsCatalogSnapshot['backup-time'] * 1000)}
                                         </p>
                                     </div>
                                     <button onClick={() => setShowPbsFileBrowser(false)} className="text-gray-500 hover:text-white transition-colors">
@@ -14220,7 +14220,7 @@
                                         const name = entry.text || entry.filename || entry.name || '-';
                                         const isDir = entry.type === 'Directory' || entry.type === 'd';
                                         const size = entry.size || entry.leaf_size || 0;
-                                        const mtime = entry.mtime ? new Date(entry.mtime * 1000).toLocaleString() : '';
+                                        const mtime = entry.mtime ? fmtDate(entry.mtime * 1000) : '';
                                         const fullPath = (pbsCatalogPath === '/' ? '/' : pbsCatalogPath + '/') + name;
                                         return (
                                             <div key={i}
@@ -15291,7 +15291,7 @@
                                     <div>
                                         <h3 className="text-lg font-semibold">{scriptOutput.name} - {t('output') || 'Output'}</h3>
                                         <p className="text-xs text-gray-500">
-                                            {t('lastRun') || 'Last run'}: {scriptOutput.last_run ? new Date(scriptOutput.last_run).toLocaleString() : (t('never') || 'Never')} 
+                                            {t('lastRun') || 'Last run'}: {scriptOutput.last_run ? fmtDate(scriptOutput.last_run) : (t('never') || 'Never')} 
                                             {scriptOutput.last_status && (
                                                 <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
                                                     scriptOutput.last_status === 'success' ? 'bg-green-500/20 text-green-400' :

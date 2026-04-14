@@ -138,7 +138,7 @@
                         {metrics.last_seen && (
                             <div className="mt-4 pt-3 border-t border-red-500/30 text-xs text-red-400">
                                 <Icons.AlertTriangle className="inline w-3 h-3 mr-1" />
-                                {t('lastSeen') || 'Last seen'}: {new Date(metrics.last_seen).toLocaleString()}
+                                {t('lastSeen') || 'Last seen'}: {fmtDate(metrics.last_seen)}
                             </div>
                         )}
                     </div>

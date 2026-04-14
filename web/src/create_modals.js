@@ -2727,6 +2727,27 @@
                                         </div>
                                     </div>
                                     
+                                    {/* NS: 24h/12h time format toggle (#215) */}
+                                    <div className="pt-4 border-t border-proxmox-border">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <Icons.Clock className="w-5 h-5 text-gray-400" />
+                                                <div>
+                                                    <p className="text-sm font-medium text-white">{t('timeFormat') || 'Time Format'}</p>
+                                                    <p className="text-xs text-gray-500">{t('timeFormatDesc') || '24-hour or 12-hour clock'}</p>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={localStorage.getItem('pegaprox-time-format') || '24h'}
+                                                onChange={e => { localStorage.setItem('pegaprox-time-format', e.target.value); addToast(t('timeFormatChanged') || 'Time format updated', 'success'); }}
+                                                className="px-3 py-1.5 bg-proxmox-dark border border-proxmox-border rounded-lg text-white text-sm"
+                                            >
+                                                <option value="24h">24h (14:30)</option>
+                                                <option value="12h">12h (2:30 PM)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
                                     <p className="text-xs text-gray-500 text-center">
                                         {t('themeNote') || 'Theme changes are applied immediately and saved to your account.'}
                                     </p>

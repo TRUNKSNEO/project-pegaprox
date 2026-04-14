@@ -3054,7 +3054,7 @@
                     <div 
                         ref={containerRef}
                         className={`bg-proxmox-card border border-proxmox-border rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col ${
-                            isFullscreen ? 'w-full h-full rounded-none' : 'w-full max-w-5xl h-[80vh]'
+                            isFullscreen ? 'w-full h-full rounded-none' : 'w-full max-w-7xl h-[85vh]'
                         }`}
                     >
                         {/* Header */}
