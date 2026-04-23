@@ -53,6 +53,7 @@
             const langs = [
                 { code: 'de', flag: '🇦🇹', label: 'DE', title: 'Deutsch' },
                 { code: 'en', flag: '🇬🇧', label: 'EN', title: 'English' },
+                { code: 'it', flag: '🇮🇹', label: 'IT', title: 'Italiano' },
                 { code: 'fr', flag: '🇫🇷', label: 'FR', title: 'Français' },
                 { code: 'es', flag: '🇪🇸', label: 'ES', title: 'Español (LATAM)' },
                 { code: 'pt', flag: '🇧🇷', label: 'PT', title: 'Português' },
