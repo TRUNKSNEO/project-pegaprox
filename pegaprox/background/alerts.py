@@ -178,49 +178,69 @@ def check_and_send_alerts():
 
         if cluster_id in cluster_managers:
             manager = cluster_managers[cluster_id]
-            
-            if target_type == 'cluster':
-                # Get cluster-wide metrics
-                summary = manager.get_cluster_summary()
-                if metric == 'cpu':
-                    current_value = summary.get('cpu_usage', 0)
-                elif metric == 'memory':
-                    mem = summary.get('memory', {})
-                    if mem.get('total', 0) > 0:
-                        current_value = (mem.get('used', 0) / mem.get('total', 1)) * 100
-                elif metric == 'disk':
-                    storage = summary.get('storage', {})
-                    if storage.get('total', 0) > 0:
-                        current_value = (storage.get('used', 0) / storage.get('total', 1)) * 100
-                target_name = manager.config.name
-                
-            elif target_type == 'node':
-                node_summary = manager.get_node_summary(target_id)
-                if metric == 'cpu':
-                    current_value = node_summary.get('cpu', 0) * 100
-                elif metric == 'memory':
-                    mem = node_summary.get('memory', {})
-                    if mem.get('total', 0) > 0:
-                        current_value = (mem.get('used', 0) / mem.get('total', 1)) * 100
-                elif metric == 'disk':
-                    rootfs = node_summary.get('rootfs', {})
-                    if rootfs.get('total', 0) > 0:
-                        current_value = (rootfs.get('used', 0) / rootfs.get('total', 1)) * 100
-                        
-            elif target_type == 'vm':
-                # Get VM metrics
-                for res in manager.get_resources():
-                    if str(res.get('vmid')) == str(target_id):
-                        if metric == 'cpu':
-                            current_value = res.get('cpu', 0) * 100
-                        elif metric == 'memory':
-                            if res.get('maxmem', 0) > 0:
-                                current_value = (res.get('mem', 0) / res.get('maxmem', 1)) * 100
-                        elif metric == 'disk':
-                            if res.get('maxdisk', 0) > 0:
-                                current_value = (res.get('disk', 0) / res.get('maxdisk', 1)) * 100
-                        target_name = res.get('name', target_id)
-                        break
+
+            # NS May 2026 — guard the metric lookup. The old code called
+            # `manager.get_cluster_summary()` and `manager.get_resources()` —
+            # neither method exists on PegaProxManager. Cluster + VM targets
+            # have been raising AttributeError since this was written.
+            try:
+                if target_type == 'cluster':
+                    # Aggregate cluster CPU/mem/disk from per-node status
+                    per_node = manager.get_node_status() or {}
+                    online = [n for n in per_node.values()
+                              if (n.get('status') or '').lower() == 'online']
+                    if metric == 'cpu' and online:
+                        current_value = sum(n.get('cpu_percent', 0) for n in online) / len(online)
+                    elif metric == 'memory':
+                        used = sum(n.get('mem_used', 0) for n in online)
+                        total = sum(n.get('mem_total', 0) for n in online)
+                        if total > 0:
+                            current_value = used / total * 100
+                    elif metric == 'disk':
+                        used = sum(n.get('disk_used', 0) for n in online)
+                        total = sum(n.get('disk_total', 0) for n in online)
+                        if total > 0:
+                            current_value = used / total * 100
+                    try:
+                        target_name = manager.config.name
+                    except Exception:
+                        target_name = cluster_id
+
+                elif target_type == 'node':
+                    node_summary = manager.get_node_summary(target_id) or {}
+                    if metric == 'cpu':
+                        current_value = node_summary.get('cpu', 0) * 100
+                    elif metric == 'memory':
+                        mem = node_summary.get('memory', {}) or {}
+                        if mem.get('total', 0) > 0:
+                            current_value = (mem.get('used', 0) / mem.get('total', 1)) * 100
+                    elif metric == 'disk':
+                        rootfs = node_summary.get('rootfs', {}) or {}
+                        if rootfs.get('total', 0) > 0:
+                            current_value = (rootfs.get('used', 0) / rootfs.get('total', 1)) * 100
+
+                elif target_type == 'vm':
+                    # MK: was `manager.get_resources()` which doesn't exist; the
+                    # actual VM enumerator on PegaProxManager is get_vm_resources()
+                    fetch = getattr(manager, 'get_vm_resources', None)
+                    vms = fetch() if callable(fetch) else []
+                    for res in (vms or []):
+                        if str(res.get('vmid')) == str(target_id):
+                            if metric == 'cpu':
+                                current_value = res.get('cpu', 0) * 100
+                            elif metric == 'memory':
+                                if res.get('maxmem', 0) > 0:
+                                    current_value = (res.get('mem', 0) / res.get('maxmem', 1)) * 100
+                            elif metric == 'disk':
+                                if res.get('maxdisk', 0) > 0:
+                                    current_value = (res.get('disk', 0) / res.get('maxdisk', 1)) * 100
+                            target_name = res.get('name', target_id)
+                            break
+            except Exception as e:
+                logging.warning(f"[AlertCheck]   alert {alert_id} metric lookup raised: {e}")
+                _record_eval(alert_id, reason=f'metric lookup error: {e}',
+                             cluster_id=cluster_id, metric=metric, target_type=target_type)
+                continue
         
         if current_value is None:
             _record_eval(alert_id, reason=f"metric '{metric}' returned no value for {target_type} '{target_id}'",
