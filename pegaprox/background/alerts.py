@@ -108,16 +108,31 @@ def save_alerts_config(config):
         logging.error(f"Error saving alerts config: {e}")
         return False
 
+_last_eval = {}  # alert_id -> dict with ts/cluster/metric/value/triggered/reason
+_last_tick_at = 0.0
+
+
+def _record_eval(alert_id, **fields):
+    """NS May 2026 — keep the last evaluation per alert so the diagnostics
+    endpoint can show *why* something fired (or didn't). Customer-facing —
+    saves us a round-trip when triaging 'no alerts arrive' tickets."""
+    snap = {'ts': time.time(), 'alert_id': alert_id}
+    snap.update(fields)
+    _last_eval[alert_id] = snap
+
+
 def check_and_send_alerts():
-    """Check all alert conditions and send notifications
-    
+    """Check all alert conditions and send notifications.
+
     LW: This runs periodically in a background thread
     Checks CPU, RAM, Disk usage against thresholds
     """
+    global _last_tick_at
+    _last_tick_at = time.time()
     config = load_alerts_config()
     if not config.get('enabled'):
         return
-    
+
     settings = load_server_settings()
     recipients = settings.get('alert_email_recipients', [])
     cooldown = settings.get('alert_cooldown', 300)
@@ -125,29 +140,42 @@ def check_and_send_alerts():
     # NS Apr 2026 (#213) — don't bail just because email isn't configured.
     # Webhook-only setups (ntfy, slack) were silently skipped because of this.
     current_time = time.time()
-    
-    for alert in config.get('alerts', []):
-        if not alert.get('enabled', True):
-            continue
-        
+    alerts_list = config.get('alerts', [])
+    logging.info(f"[AlertCheck] tick: {len(alerts_list)} alert(s), {len(cluster_managers)} cluster(s) loaded, recipients={len(recipients)}")
+
+    for alert in alerts_list:
         alert_id = alert.get('id', '')
+        if not alert.get('enabled', True):
+            _record_eval(alert_id, reason='disabled')
+            continue
+
         cluster_id = alert.get('cluster_id', '')
         metric = alert.get('metric', '')  # cpu, memory, disk
         threshold = alert.get('threshold', 80)
         operator = alert.get('operator', '>')  # >, <, =
         target_type = alert.get('target_type', 'cluster')  # cluster, node, vm
         target_id = alert.get('target_id', '')  # node name or vmid
-        
+
         # Check cooldown
-        alert_key = f"{cluster_id}:{target_type}:{target_id}:{metric}"
+        # NS May 2026: include alert_id so a warning rule and a critical rule
+        # on the same metric don't poison each other's cooldown.
+        alert_key = f"{alert_id}:{cluster_id}:{target_type}:{target_id}:{metric}"
         if alert_key in _alert_last_sent:
             if current_time - _alert_last_sent[alert_key] < cooldown:
+                _record_eval(alert_id, reason=f'cooldown ({int(current_time - _alert_last_sent[alert_key])}s of {cooldown}s)',
+                             cluster_id=cluster_id, metric=metric)
                 continue
-        
+
         # Get current value
         current_value = None
         target_name = target_id
-        
+
+        if cluster_id not in cluster_managers:
+            _record_eval(alert_id, reason=f"cluster '{cluster_id}' not loaded (have: {sorted(cluster_managers.keys())})",
+                         cluster_id=cluster_id, metric=metric, target_type=target_type)
+            logging.info(f"[AlertCheck]   skip {alert_id}: cluster '{cluster_id}' not in cluster_managers")
+            continue
+
         if cluster_id in cluster_managers:
             manager = cluster_managers[cluster_id]
             
@@ -195,8 +223,11 @@ def check_and_send_alerts():
                         break
         
         if current_value is None:
+            _record_eval(alert_id, reason=f"metric '{metric}' returned no value for {target_type} '{target_id}'",
+                         cluster_id=cluster_id, metric=metric, target_type=target_type, target_id=target_id)
+            logging.info(f"[AlertCheck]   skip {alert_id}: {target_type} '{target_id}' / {metric} → no value")
             continue
-        
+
         # Check condition
         triggered = False
         if operator == '>' and current_value > threshold:
@@ -207,7 +238,12 @@ def check_and_send_alerts():
             triggered = True
         elif operator == '<=' and current_value <= threshold:
             triggered = True
-        
+
+        if not triggered:
+            _record_eval(alert_id, reason=f'below threshold ({metric}={current_value:.1f}% {operator} {threshold}% → false)',
+                         cluster_id=cluster_id, metric=metric, current_value=round(current_value, 1),
+                         threshold=threshold, operator=operator, triggered=False)
+
         if triggered:
             # Send alert
             alert_name = alert.get('name', f'{metric} Alert')
@@ -255,13 +291,19 @@ This is an automated alert from PegaProx.
             fire_all_webhooks = '__all_webhooks__' in selected
 
             sent_anywhere = False
-            if want_email and recipients:
+            email_status = 'not selected'
+            if want_email and not recipients:
+                email_status = 'no recipients configured'
+                logging.warning(f"[AlertCheck]   alert {alert_id} wants email but no alert_email_recipients set")
+            elif want_email and recipients:
                 success, error = send_email(recipients, subject, body, html_body)
                 if success:
                     sent_anywhere = True
-                    logging.info(f"Alert sent: {alert_name} ({metric}={current_value:.1f}%)")
+                    email_status = f'ok → {len(recipients)} recipient(s)'
+                    logging.info(f"[AlertCheck]   alert {alert_id} email → ok ({len(recipients)})")
                 elif error:
-                    logging.warning(f"Alert email failed: {error}")
+                    email_status = f'failed: {error}'
+                    logging.warning(f"[AlertCheck]   alert {alert_id} email → FAILED: {error}")
 
             severity = 'critical' if current_value > 90 else 'warning' if current_value > 70 else 'info'
             alert_data = {
@@ -284,13 +326,23 @@ This is an automated alert from PegaProx.
                     except Exception as he:
                         logging.debug(f"Notification handler error: {he}")
 
+            webhook_status = 'no webhook channels selected'
             if webhook_ids or fire_all_webhooks:
                 try:
                     from pegaprox.utils.webhooks import send_to_channels
                     send_to_channels(alert_data, channel_ids=None if fire_all_webhooks else webhook_ids)
                     sent_anywhere = True
+                    webhook_status = f'dispatched to {webhook_ids or "all webhooks"}'
+                    logging.info(f"[AlertCheck]   alert {alert_id} webhooks → {webhook_status}")
                 except Exception as he:
-                    logging.debug(f"Webhook dispatch error: {he}")
+                    webhook_status = f'dispatch error: {he}'
+                    logging.warning(f"[AlertCheck]   alert {alert_id} webhooks → FAILED: {he}")
+
+            _record_eval(alert_id, triggered=True, current_value=round(current_value, 1),
+                         threshold=threshold, operator=operator, metric=metric,
+                         cluster_id=cluster_id, target_type=target_type, target_id=target_id,
+                         severity=severity, email=email_status, webhooks=webhook_status,
+                         sent=sent_anywhere)
 
             # bump cooldown only if at least one destination ran (email OR webhook)
             # purely "log" rules should still respect cooldown, but we don't dedupe them

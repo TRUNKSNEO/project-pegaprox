@@ -615,5 +615,64 @@ def test_alert_channel(cid):
     return jsonify({'success': ok, 'detail': detail})
 
 
+# NS May 2026 — when customers report "alerts don't fire", the previous
+# diagnostic story was: nothing. The check loop ran silently every 60s and
+# you couldn't tell *why* a rule didn't trigger. These two endpoints give
+# admins a way to see what the loop saw and force a re-check on demand.
+
+@bp.route('/api/alerts/diagnostics', methods=['GET'])
+@require_auth(roles=[ROLE_ADMIN])
+def alerts_diagnostics():
+    from pegaprox.api.helpers import load_server_settings
+    from pegaprox.background import alerts as A
+    settings = load_server_settings() or {}
+    cfg = A.load_alerts_config()
+    return jsonify({
+        'last_tick_at': A._last_tick_at,
+        'tick_interval_seconds': 60,
+        'alerts_in_config': len(cfg.get('alerts', [])),
+        'enabled': cfg.get('enabled', True),
+        'cooldown_seconds': settings.get('alert_cooldown', 300),
+        'email_recipients': len(settings.get('alert_email_recipients') or []),
+        'webhook_channels': [
+            {'id': c.get('id'), 'name': c.get('name'), 'type': c.get('type'),
+             'enabled': c.get('enabled', True)}
+            for c in (settings.get('alert_webhooks') or [])
+        ],
+        'clusters_loaded': sorted([
+            {'id': cid, 'connected': bool(getattr(m, 'is_connected', False))}
+            for cid, m in cluster_managers.items()
+        ], key=lambda r: r['id']),
+        'alerts': [
+            {'id': a.get('id'), 'name': a.get('name'),
+             'cluster_id': a.get('cluster_id'),
+             'metric': a.get('metric'),
+             'operator': a.get('operator'),
+             'threshold': a.get('threshold'),
+             'target_type': a.get('target_type'),
+             'target_id': a.get('target_id'),
+             'channels': a.get('channels'),
+             'enabled': a.get('enabled', True),
+             'last_evaluation': A._last_eval.get(a.get('id'))}
+            for a in cfg.get('alerts', [])
+        ],
+    })
+
+
+@bp.route('/api/alerts/force-check', methods=['POST'])
+@require_auth(roles=[ROLE_ADMIN])
+def alerts_force_check():
+    """Run check_and_send_alerts() once, optionally clearing the cooldown
+    map so an alert that already fired in this process can re-fire."""
+    from pegaprox.background import alerts as A
+    if (request.args.get('reset_cooldown', '').lower() in ('1', 'true', 'yes')):
+        A._alert_last_sent.clear()
+    try:
+        A.check_and_send_alerts()
+        return jsonify({'ok': True, 'evaluations': A._last_eval})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 # =====================================================
 
