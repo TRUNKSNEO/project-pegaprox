@@ -25,31 +25,67 @@ from pegaprox.api.helpers import load_server_settings, save_server_settings
 from pegaprox.utils.email import send_email
 
 def load_alerts_config():
-    """Load alerts configuration from SQLite database
-    
-    SQLite migration
+    """Load alerts configuration from SQLite database.
+
+    NS May 2026 — Cluster-level alerts (created via the per-cluster UI under
+    Automation → Alerts) live in the `cluster_alerts` table. The legacy `alerts`
+    table contains old global-style rows. The background check loop used to
+    only read `alerts`, which is why nothing ever fired for users who created
+    alerts in the new UI. Now we read both, prefer cluster_alerts, and inject
+    `cluster_id` from the table column when missing in the JSON config.
     """
     defaults = {'alerts': [], 'enabled': True}
-    
+    out = []
+    seen_ids = set()
+
+    # Primary source — cluster_alerts (populated by /api/clusters/<id>/alerts)
     try:
         db = get_db()
-        alerts = db.get_all_alerts()
-        
-        if alerts:
-            # Convert alerts dict to list format expected by the rest of the code
-            alert_list = list(alerts.values())
-            return {'alerts': alert_list, 'enabled': True}
+        cur = db.conn.cursor()
+        cur.execute('SELECT cluster_id, alert_type, config, enabled '
+                    'FROM cluster_alerts')
+        for row in cur.fetchall():
+            try:
+                cfg = json.loads(row['config'] or '{}')
+            except Exception:
+                continue
+            if not cfg:
+                continue
+            cfg.setdefault('id', row['alert_type'])
+            cfg.setdefault('cluster_id', row['cluster_id'])
+            # row['enabled'] wins over a stale config payload
+            cfg['enabled'] = bool(row['enabled']) and cfg.get('enabled', True)
+            if not cfg.get('metric'):
+                continue  # incomplete row — skip
+            out.append(cfg)
+            seen_ids.add(cfg.get('id'))
+    except Exception as e:
+        logging.debug(f"[alerts] cluster_alerts read failed: {e}")
+
+    # Legacy source — `alerts` table. Only include rows that look fully
+    # populated (skip the empty-`type` stubs from old migrations).
+    try:
+        db = get_db()
+        legacy = db.get_all_alerts() or {}
+        for aid, a in legacy.items():
+            if aid in seen_ids:
+                continue
+            metric = a.get('metric') or a.get('type')
+            if not metric:
+                continue
+            a.setdefault('id', aid)
+            a.setdefault('metric', metric)
+            out.append(a)
     except Exception as e:
         logging.error(f"Error loading alerts from database: {e}")
-        # Legacy fallback
         if os.path.exists(ALERTS_CONFIG_FILE):
             try:
                 with open(ALERTS_CONFIG_FILE, 'r') as f:
                     return {**defaults, **json.load(f)}
-            except:
+            except Exception:
                 pass
-    
-    return defaults
+
+    return {'alerts': out, 'enabled': True}
 
 
 def save_alerts_config(config):

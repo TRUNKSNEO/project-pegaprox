@@ -200,22 +200,30 @@ def create_cluster_alert(cluster_id):
     if cluster_id not in alerts:
         alerts[cluster_id] = []
     
+    # NS May 2026 — used to silently drop `channels` and `cluster_id`, so the
+    # background loop never knew where to dispatch and which cluster the alert
+    # belonged to. Persist both in the JSON config.
+    channels = data.get('channels')
+    if not isinstance(channels, list):
+        channels = []
     alert = {
         'id': str(uuid.uuid4())[:8],
         'name': data.get('name', 'Unnamed Alert'),
+        'cluster_id': cluster_id,
         'metric': data.get('metric', 'cpu'),
         'operator': data.get('operator', '>'),
         'threshold': data.get('threshold', 80),
         'target_type': data.get('target_type', 'cluster'),
         'target_id': data.get('target_id'),
-        'action': data.get('action', 'log'),
+        'channels': channels,
+        'action': data.get('action', 'log'),  # legacy fallback
         'enabled': data.get('enabled', True),
         'created_at': datetime.now().isoformat()
     }
-    
+
     alerts[cluster_id].append(alert)
     save_cluster_alerts(alerts)
-    
+
     return jsonify({'success': True, 'alert': alert})
 
 @bp.route('/api/clusters/<cluster_id>/alerts/<alert_id>', methods=['PUT'])
@@ -232,12 +240,14 @@ def update_cluster_alert(cluster_id, alert_id):
     
     for alert in cluster_alerts:
         if alert['id'] == alert_id:
-            if 'enabled' in data:
-                alert['enabled'] = data['enabled']
-            if 'name' in data:
-                alert['name'] = data['name']
-            if 'threshold' in data:
-                alert['threshold'] = data['threshold']
+            for k in ('enabled', 'name', 'threshold', 'metric', 'operator',
+                      'target_type', 'target_id', 'action'):
+                if k in data:
+                    alert[k] = data[k]
+            if 'channels' in data and isinstance(data['channels'], list):
+                alert['channels'] = data['channels']
+            # ensure cluster_id is always present for older rows
+            alert.setdefault('cluster_id', cluster_id)
             save_cluster_alerts(alerts)
             return jsonify({'success': True, 'alert': alert})
     
