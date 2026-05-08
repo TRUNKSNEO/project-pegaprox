@@ -1147,33 +1147,67 @@ def verify_password_api():
     elif auth_source in ('oidc', 'entra'):
         # NS May 2026: stolen-cookie replay risk — the original "session valid → accept"
         # made re-auth a no-op for OIDC users. attacker with the cookie passes the gate
-        # for sensitive ops (delete cluster, rotate creds, etc). step-up via TOTP closes it.
-        # if the user hasn't enrolled TOTP we fail closed and ask them to set it up.
+        # for sensitive ops (delete cluster, rotate creds, etc).
+        # NS May 2026 (v0.9.9.1 follow-up) — TOTP step-up was wrong as a hard
+        # requirement: PegaProx blocks OIDC users from enrolling TOTP at /2fa/setup
+        # ("2FA is managed by your OIDC provider"), so a strict TOTP gate locks
+        # OIDC admins out of re-auth-gated ops entirely. Correct ladder:
+        #   1. WebAuthn proof (works regardless of auth_source — independent enrolment)
+        #   2. TOTP if the user happens to have one (e.g. ex-local user converted to OIDC)
+        #   3. Fall back to session-validity acceptance + warning log so the
+        #      admin can see the soft state in the audit trail.
+        # Properly fixing #3 requires an OIDC `prompt=login` redirect flow which
+        # is a bigger piece of work — tracked separately.
         if user.get('role') != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
-        totp_secret = user.get('totp_secret', '')
-        if not totp_secret:
-            # MK: OIDC admins without 2FA cannot perform re-auth-gated ops anymore (#294 follow-up)
-            logging.warning(f"[AUTH] OIDC re-auth blocked for admin '{username}' — no TOTP enrolled")
-            return jsonify({
-                'error': 'Re-authentication requires 2FA for OIDC accounts. Enable TOTP in your account settings first.',
-                'requires_totp_setup': True,
-            }), 403
-        totp_code = (data.get('totp_code') or '').strip()
-        if not totp_code:
-            return jsonify({
-                'error': 'TOTP code required for re-authentication',
-                'requires_totp': True,
-            }), 401
+
+        # Path A: WebAuthn proof token (preferred for OIDC users)
+        webauthn_proof = (data.get('webauthn_proof') or '')[:256]
         try:
-            import pyotp
-            if not pyotp.TOTP(totp_secret).verify(totp_code, valid_window=1):
-                logging.warning(f"[AUTH] OIDC re-auth bad TOTP for admin '{username}'")
-                return jsonify({'error': 'Invalid TOTP code'}), 401
-        except Exception as e:
-            logging.error(f"[AUTH] TOTP verify error for '{username}': {e}")
-            return jsonify({'error': 'TOTP verification failed'}), 500
-        logging.info(f"[AUTH] OIDC re-auth via TOTP for admin '{username}'")
+            db = get_db()
+            wa_row = db.query('SELECT COUNT(*) AS n FROM webauthn_credentials WHERE username = ?', (username,))
+            has_webauthn = bool(wa_row and wa_row[0]['n'] > 0)
+        except Exception:
+            has_webauthn = False
+
+        if has_webauthn:
+            if not webauthn_proof:
+                return jsonify({
+                    'error': 'WebAuthn verification required for re-authentication',
+                    'requires_webauthn': True,
+                }), 401
+            from pegaprox.api.webauthn import consume_webauthn_proof
+            if not consume_webauthn_proof(username, webauthn_proof):
+                logging.warning(f"[AUTH] OIDC re-auth bad WebAuthn proof for admin '{username}'")
+                return jsonify({'error': 'Invalid WebAuthn proof'}), 401
+            logging.info(f"[AUTH] OIDC re-auth via WebAuthn for admin '{username}'")
+
+        # Path B: TOTP if available (ex-local users still carry a totp_secret)
+        elif user.get('totp_secret'):
+            totp_code = (data.get('totp_code') or '').strip()
+            if not totp_code:
+                return jsonify({
+                    'error': 'TOTP code required for re-authentication',
+                    'requires_totp': True,
+                }), 401
+            try:
+                import pyotp
+                if not pyotp.TOTP(user['totp_secret']).verify(totp_code, valid_window=1):
+                    logging.warning(f"[AUTH] OIDC re-auth bad TOTP for admin '{username}'")
+                    return jsonify({'error': 'Invalid TOTP code'}), 401
+            except Exception as e:
+                logging.error(f"[AUTH] TOTP verify error for '{username}': {e}")
+                return jsonify({'error': 'TOTP verification failed'}), 500
+            logging.info(f"[AUTH] OIDC re-auth via TOTP for admin '{username}'")
+
+        # Path C: nothing local enrolled — accept on session validity, but log it
+        # loudly. OIDC admins who care about replay-resistance should register a
+        # WebAuthn credential (Settings → Account → Security keys).
+        else:
+            logging.warning(
+                f"[AUTH] OIDC re-auth on session-validity only for admin '{username}' "
+                "(no WebAuthn / TOTP enrolled — recommend WebAuthn enrolment)"
+            )
     else:
         return jsonify({'error': 'Password verification not supported for this account type'}), 400
 
