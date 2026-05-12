@@ -8246,6 +8246,9 @@
                         sort_by: sortBy,
                         sort_dir: sortDir
                     });
+                    if (selectedCluster?.id) {
+                        params.set('cluster_id', selectedCluster.id);
+                    }
 
                     Object.entries(filters || {}).forEach(([key, value]) => {
                         if (value !== null && value !== undefined && String(value).trim() !== '') {

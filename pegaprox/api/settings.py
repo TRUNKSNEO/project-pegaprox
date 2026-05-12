@@ -1152,6 +1152,12 @@ def update_server_settings():
                 settings['alert_update_available'] = bool(data['alert_update_available'])
             if 'metrics_public' in data:
                 settings['metrics_public'] = bool(data['metrics_public'])
+            if 'syslog_filter_by_selected_cluster' in data:
+                old_val = settings.get('syslog_filter_by_selected_cluster', False)
+                settings['syslog_filter_by_selected_cluster'] = bool(data['syslog_filter_by_selected_cluster'])
+                if old_val != settings['syslog_filter_by_selected_cluster']:
+                    log_audit(request.session.get('user', 'admin'), 'settings.syslog',
+                              f"Syslog cluster hostname filter {'enabled' if settings['syslog_filter_by_selected_cluster'] else 'disabled'}")
             if 'strict_session_ip' in data:
                 settings['strict_session_ip'] = bool(data['strict_session_ip'])
 
@@ -1381,6 +1387,12 @@ def update_server_settings():
                 settings['alert_cooldown'] = max(60, min(86400, int(request.form['alert_cooldown'])))
             if 'alert_update_available' in request.form:
                 settings['alert_update_available'] = request.form['alert_update_available'] in ('true', '1', 'on')
+            if 'syslog_filter_by_selected_cluster' in request.form:
+                old_syslog_filter = settings.get('syslog_filter_by_selected_cluster', False)
+                settings['syslog_filter_by_selected_cluster'] = request.form['syslog_filter_by_selected_cluster'] in ('true', '1', 'on')
+                if old_syslog_filter != settings['syslog_filter_by_selected_cluster']:
+                    log_audit(request.session.get('user', 'admin'), 'settings.syslog',
+                              f"Syslog cluster hostname filter {'enabled' if settings['syslog_filter_by_selected_cluster'] else 'disabled'}")
 
             # Handle certificate upload
             if 'ssl_cert' in request.files:
@@ -4572,6 +4584,5 @@ def test_ldap():
         results['steps'].append({'step': failed_step, 'status': 'error', 'detail': str(e)})
     
     return jsonify(results)
-
 
 

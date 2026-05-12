@@ -80,6 +80,9 @@ def load_server_settings():
         # MK Apr 2026 — when true, /api/metrics needs no auth. Useful for setups
         # where a reverse proxy/mutual-TLS already gates scrapes. Default off.
         'metrics_public': False,
+        # When enabled, the Syslog viewer only shows hostnames belonging to
+        # the currently selected cluster instead of all collected syslog rows.
+        'syslog_filter_by_selected_cluster': False,
         # Webhook alert channels (Slack, Discord, Teams, ntfy, generic)
         # Each: {id, name, type, url, enabled, ...type-specific fields}
         'alert_webhooks': [],
