@@ -7,6 +7,7 @@ import logging
 import re
 import sqlite3
 import threading
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 
@@ -16,7 +17,7 @@ from pegaprox.models.permissions import *
 
 from pegaprox.utils.auth import require_auth, load_users
 from pegaprox.utils.rbac import get_user_clusters
-from pegaprox.api.helpers import check_cluster_access
+from pegaprox.api.helpers import check_cluster_access, load_server_settings
 from pegaprox.background.metrics import load_metrics_history, start_metrics_collector
 from pegaprox.background.syslog_server import DB_FILE, SEVERITY_MAP
 from pegaprox.api.schedules import start_scheduler
@@ -56,6 +57,53 @@ def _syslog_like_clause(search_text):
         )""",
         [like, like, like, like, like, like],
     )
+
+
+def _syslog_hostname_tokens(value):
+    value = str(value or '').strip().lower()
+    if not value:
+        return set()
+    if '://' in value:
+        parsed = urlparse(value)
+        value = parsed.hostname or value
+    value = value.split('/')[0].split('@')[-1]
+    if value.startswith('[') and ']' in value:
+        value = value[1:value.index(']')]
+    elif ':' in value and value.count(':') == 1:
+        value = value.rsplit(':', 1)[0]
+    value = value.strip('.')
+    if not value:
+        return set()
+    tokens = {value}
+    if '.' in value:
+        tokens.add(value.split('.', 1)[0])
+    return tokens
+
+
+def _syslog_cluster_hostnames(cluster_id):
+    manager = cluster_managers.get(cluster_id)
+    if not manager:
+        return set()
+
+    hostnames = set()
+    config = getattr(manager, 'config', None)
+    for value in (
+        getattr(manager, 'host', ''),
+        getattr(config, 'host', '') if config else '',
+        getattr(config, 'name', '') if config else '',
+    ):
+        hostnames.update(_syslog_hostname_tokens(value))
+
+    try:
+        node_status = manager.get_node_status() or {}
+        for node_name in node_status.keys():
+            hostnames.update(_syslog_hostname_tokens(node_name))
+    except Exception as exc:
+        logging.debug(f"[Syslog] Could not load nodes for cluster filter {cluster_id}: {exc}")
+        for node_name in getattr(manager, 'ha_node_status', {}).keys():
+            hostnames.update(_syslog_hostname_tokens(node_name))
+
+    return hostnames
 
 @bp.route('/api/reports/summary', methods=['GET'])
 @require_auth()
@@ -180,6 +228,7 @@ def get_integrated_syslog_events():
     hostname = (request.args.get('hostname') or '').strip()
     source_ip = (request.args.get('source_ip') or '').strip()
     facility = (request.args.get('facility') or '').strip()
+    cluster_id = (request.args.get('cluster_id') or '').strip()
 
     sort_map = {
         'id': 'logs.id',
@@ -266,6 +315,22 @@ def get_integrated_syslog_events():
             params.append(facility_value)
         except ValueError:
             pass
+
+    if cluster_id and load_server_settings().get('syslog_filter_by_selected_cluster', False):
+        ok, err = check_cluster_access(cluster_id)
+        if not ok:
+            return err
+        cluster_hostnames = sorted(_syslog_cluster_hostnames(cluster_id))
+        if cluster_hostnames:
+            cluster_hostname_where = []
+            for value in cluster_hostnames:
+                cluster_hostname_where.append("LOWER(logs.hostname) = ?")
+                params.append(value)
+                cluster_hostname_where.append("LOWER(logs.hostname) LIKE ?")
+                params.append(f"{value}.%")
+            where.append(f"({' OR '.join(cluster_hostname_where)})")
+        else:
+            where.append("1 = 0")
 
     where_sql = f"WHERE {' AND '.join(where)}" if where else ''
     joins_sql = f"{' '.join(joins)}" if joins else ''

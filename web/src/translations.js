@@ -68,6 +68,9 @@
                 cmVsnfdSecureBoot: 'Secure-Boot-Status',
                 forceDeletePlan: 'Diesen hängenden Plan zwangsweise löschen?',
                 refresh: 'Aktualisieren',
+                syslogServer: 'Syslog Server',
+                syslogClusterFilter: 'Cluster-begrenzter Syslog-Viewer',
+                syslogClusterFilterDesc: 'Wenn aktiviert, zeigt das Syslog-Kapitel nur Logzeilen, deren Hostname zum ausgewählten Cluster oder seinen Nodes gehört.',
 
                 // General
                 loading: 'Laden...',
@@ -3845,6 +3848,9 @@
                 cmVsnfdSecureBoot: 'Secure Boot status',
                 forceDeletePlan: 'Force-delete this stuck plan?',
                 refresh: 'Refresh',
+                syslogServer: 'Syslog Server',
+                syslogClusterFilter: 'Cluster-scoped syslog viewer',
+                syslogClusterFilterDesc: 'When enabled, the Syslog chapter only shows log rows whose hostname belongs to the selected cluster or one of its nodes.',
 
                 // General
                 loading: 'Loading...',

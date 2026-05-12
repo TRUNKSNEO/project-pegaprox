@@ -727,6 +727,7 @@
                 alert_email_recipients: [],
                 alert_cooldown: 300,
                 alert_update_available: false,
+                syslog_filter_by_selected_cluster: false,
             });
             const [serverLoading, setServerLoading] = useState(false);
             const [showRestartConfirm, setShowRestartConfirm] = useState(false);
@@ -1526,6 +1527,7 @@
                             alert_email_recipients: data.alert_email_recipients || [],
                             alert_cooldown: data.alert_cooldown || 300,
                             alert_update_available: !!data.alert_update_available,
+                            syslog_filter_by_selected_cluster: !!data.syslog_filter_by_selected_cluster,
                             // Security settings
                             login_max_attempts: data.login_max_attempts || 5,
                             login_lockout_time: data.login_lockout_time || 300,
@@ -1731,6 +1733,7 @@
                         formData.append('alert_cooldown', serverSettings.alert_cooldown);
                     }
                     formData.append('alert_update_available', serverSettings.alert_update_available ? 'true' : 'false');
+                    formData.append('syslog_filter_by_selected_cluster', serverSettings.syslog_filter_by_selected_cluster ? 'true' : 'false');
 
                     if (serverSettings.ssl_cert_file) {
                         formData.append('ssl_cert', serverSettings.ssl_cert_file);
@@ -2432,6 +2435,17 @@
                             >
                                 <Icons.Server className="w-4 h-4" />
                                 <span>{t('server') || 'Server'}</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('syslog')}
+                                className={`flex items-center gap-2 ${isCorporate ? 'px-3 py-1.5 text-[13px]' : 'px-4 py-2.5 text-sm'} font-medium transition-colors whitespace-nowrap ${
+                                    activeTab === 'syslog'
+                                        ? (isCorporate ? 'text-white border-b-2 border-[#49afd9] font-medium' : 'text-proxmox-orange border-b-2 border-proxmox-orange bg-proxmox-dark/50')
+                                        : 'text-gray-400 hover:text-white hover:bg-proxmox-dark/30'
+                                }`}
+                            >
+                                <Icons.FileText className="w-4 h-4" />
+                                <span>{t('syslogServer') || 'Syslog Server'}</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('audit')}
@@ -5299,7 +5313,70 @@
                                     </div>
                                 </div>
                             )}
-                            
+
+                            {/* Syslog Server Settings Tab */}
+                            {activeTab === 'syslog' && (
+                                <div className="space-y-6">
+                                    <h3 className="text-lg font-semibold text-white">{t('syslogServer') || 'Syslog Server'}</h3>
+
+                                    <div className="bg-proxmox-dark border border-proxmox-border rounded-xl p-4 space-y-4">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div>
+                                                <h4 className="font-medium text-white flex items-center gap-2">
+                                                    <Icons.FileText />
+                                                    {t('syslogClusterFilter') || 'Cluster-scoped syslog viewer'}
+                                                </h4>
+                                                <p className="text-sm text-gray-400 mt-1">
+                                                    {t('syslogClusterFilterDesc') || 'When enabled, the Syslog chapter only shows log rows whose hostname belongs to the selected cluster or one of its nodes.'}
+                                                </p>
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!serverSettings.syslog_filter_by_selected_cluster}
+                                                    onChange={e => setServerSettings({...serverSettings, syslog_filter_by_selected_cluster: e.target.checked})}
+                                                    className="rounded border-proxmox-border bg-proxmox-darker"
+                                                />
+                                                <span className="text-sm text-gray-300">{t('enabled') || 'Enabled'}</span>
+                                            </label>
+                                        </div>
+
+                                        <div className="pt-3 flex justify-end border-t border-proxmox-border">
+                                            <button
+                                                onClick={async () => {
+                                                    setServerLoading(true);
+                                                    try {
+                                                        const response = await fetch(`${API_URL}/settings/server`, {
+                                                            method: 'POST',
+                                                            credentials: 'include',
+                                                            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({
+                                                                syslog_filter_by_selected_cluster: !!serverSettings.syslog_filter_by_selected_cluster
+                                                            })
+                                                        });
+                                                        if (response && response.ok) {
+                                                            addToast(t('settingsSaved') || 'Settings saved', 'success');
+                                                            fetchServerSettings();
+                                                        } else {
+                                                            const err = await response.json().catch(() => ({}));
+                                                            addToast(err.error || t('errorSavingSettings') || 'Error saving settings', 'error');
+                                                        }
+                                                    } catch (err) {
+                                                        addToast(t('errorSavingSettings') || 'Error saving settings', 'error');
+                                                    }
+                                                    setServerLoading(false);
+                                                }}
+                                                disabled={serverLoading}
+                                                className="px-4 py-2 bg-proxmox-orange hover:bg-orange-600 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {serverLoading && <Icons.Loader className="w-4 h-4 animate-spin" />}
+                                                {t('saveSettings') || t('save') || 'Save'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Server Settings Tab */}
                             {activeTab === 'server' && (
                                 <div className="space-y-6">
